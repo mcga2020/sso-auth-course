@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 3 课 · 三种票据的一生：TGT、TGC 与单点登出</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 3 课 · CAS 票据体系深入</p>
+<h1>三种票据的一生：TGT、TGC 与单点登出</h1>
+<p class="subtitle">谁住在哪里、活多久、怎么死——以及你们公司架构里的两层会话。</p>
+
+<div class="lesson-meta">
+  <span>约 12 分钟</span>
+  <span>前置：<a href="0002-cas-login-sequence-walkthrough.html">第 2 课</a></span>
+  <span>速查：<a href="../reference/auth-glossary.html">术语表</a></span>
+</div>
+
+<p>第 2 课你已经走完一次完整登录，见过了 <code>ST</code> 和 <code>TGC</code> 的出场。这一课把镜头拉近：CAS 体系里其实住着<strong>三张票据</strong>，各有各的住址、寿命和死法。搞清它们，一半的「登录灵异事件」都会变成「哦，原来是它死了」。</p>
+
+<p>更重要的是：你们的应用今天就运行在这些票据之上，而未来的 OIDC 迁移怎么处理「正在登录中的用户」，答案也埋在这里。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§1</span>三件套：谁住在哪里</h2>
+
+<table>
+  <thead><tr><th>票据</th><th>住在哪</th><th>干什么</th><th>寿命量级</th></tr></thead>
+  <tbody>
+    <tr><td><a href="../reference/auth-glossary.html#tgt"><strong>TGT</strong></a><br>Ticket-Granting Ticket</td>
+      <td><strong>CAS 服务器</strong>的存储里</td>
+      <td>SSO 会话本体。「凭它签发票据」——所有 ST 都从它而来</td>
+      <td>小时级（服务器策略）</td></tr>
+    <tr><td><a href="../reference/auth-glossary.html#tgc"><strong>TGC</strong></a><br>Ticket-Granting Cookie</td>
+      <td><strong>浏览器</strong>，CAS 域名下的 Cookie</td>
+      <td>TGT 的「门牌号」。浏览器拿着它，CAS 就知道 TGT 是哪张</td>
+      <td>随 TGT 生灭</td></tr>
+    <tr><td><a href="../reference/auth-glossary.html#st"><strong>ST</strong></a><br>Service Ticket</td>
+      <td>URL 里（<code>?ticket=ST-…</code>），转瞬即逝</td>
+      <td>给<strong>某一个应用</strong>的一次性凭证，用完作废</td>
+      <td>分钟级、一次性</td></tr>
+  </tbody>
+</table>
+
+<p>类比一家健身房：<strong>TGT 是店里的会员档案</strong>（锁在柜台），<strong>TGC 是你手里的会员卡</strong>（进门刷卡即认出你），<strong>ST 是某个团课教室的一次性签到码</strong>（只对这个教室有效，划一次就作废）。</p>
+
+<p class="aside"><span class="aside-title">家族其他成员，知道存在即可</span>
+CAS 协议里还有代理票据 <code>PGT</code>/<code>PT</code>（让应用 A 拿着用户的授权去访问应用 B，二级场景，你们用不到），以及登录页防 CSRF 的 <code>LT</code>（实现细节）。日常打交道的就是上表三件套。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§2</span>票据的一生：出生、服务、衰老、死亡</h2>
+
+<div class="seq">
+  <div class="seq-title">图 1 · 三张票据的生命时间线</div>
+
+  <div class="step"><span class="n">1</span><div>
+    <strong>出生</strong>（第 2 课第 3–4 步）：你在 CAS 输对密码
+    <span class="desc">CAS 服务器创建 TGT → 浏览器种下 TGC → 给当前应用签发第一张 ST</span></div></div>
+
+  <div class="step"><span class="n">2</span><div>
+    <strong>服务</strong>：此后每接入一个新应用
+    <span class="desc">浏览器携 TGC 访问 CAS → CAS 凭 TGT 免密签发新 ST（每应用一张，互不通用）→ 新应用建自己的本地 Session</span></div></div>
+
+  <div class="step"><span class="n">3</span><div>
+    <strong>衰老</strong>（两种到期方式，由服务器策略决定）
+    <span class="desc">闲置超时：多久没用就失效；最长寿命：无论多活跃，到点必死。TGT 一死，TGC 立刻变废牌——下一个应用就会要求重新输密码</span></div></div>
+
+  <div class="step"><span class="n">4</span><div>
+    <strong>死亡</strong>（主动登出）：访问 CAS 的 <code>/logout</code>
+    <span class="desc">规范原文：「/logout 销毁客户端的单点登录 CAS 会话」——TGT 被显式销毁，TGC 一并失效，直到重新出示凭证才能再拿 ST</span></div></div>
+</div>
+
+<p>注意寿命的巨大落差：<strong>ST 活分钟、TGT 活小时</strong>。这解释了很多现象——比如你上午登录过，午休回来刷新页面还能用（应用本地 Session 还在，且 TGT 没过期，新应用照样免密接入）；但隔了一个周末回来，第二个应用就开始要密码了（TGT 已因闲置超时死亡）。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§3</span>单点登出：为什么比单点登录难</h2>
+
+<p>先想一个问题：用户点了「退出登录」，CAS 销毁 TGT 就完事了吗？</p>
+
+<p>不完事。回想第 1 课图 1：<strong>每个应用都有自己的本地 Session</strong>（OA 一份、Wiki 一份）。CAS 销毁 TGT 只管自己这一层——各应用手里的本地会话它碰不着。这就是单点登出（<a href="../reference/auth-glossary.html#slo">SLO · Single Log-Out</a>）难的根源。</p>
+
+<p>CAS 的解法是<strong>后端通道逐一通知</strong>。规范原文：TGT 被显式过期时，CAS 服务器<strong>必须向本会话期间所有拿到过 ST 的应用地址发送 HTTP POST</strong>，内容是一份 SAML 格式的登出通知（<code>LogoutRequest</code> XML）；应用需要实现对应的处理端点，收到通知就销毁自己的本地 Session。规范还规定这是 fire-and-forget——<strong>「CAS 服务器应忽略 SLO POST 可能发生的一切错误」</strong>。</p>
+
+<p class="aside"><span class="aside-title">fire-and-forget 的双刃剑</span>
+这个设计让登出操作不会被某个挂掉的应用卡住，但也意味着：<strong>通知发出去，没人保证对方处理了</strong>。所以「登出了 OA，Wiki 却还在登录状态」是 SLO 的经典症状——要么 Wiki 没实现处理端点，要么通知发过去静默失败了。这正是排错时的第一怀疑对象。</p>
+
+<p>另外，<code>/logout</code> 只接受一个可选参数 <code>service</code>——登出后把浏览器自动送去哪个地址（是否放行由服务器配置决定，同样受白名单约束）。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§4</span>你们公司的两层会话（真实架构）</h2>
+
+<p>现在把第 2 课结尾的架构图升级成<strong>会话全景</strong>——用户登录后，实际上同时存在三层会话：</p>
+
+<div class="seq">
+  <div class="seq-title">图 2 · 一次登录，三层会话同时建立</div>
+  <div class="step"><span class="n">3</span><div>
+    <strong>第③层 · PingFederate 会话</strong>（PF 自己的域 Cookie + 服务器会话）
+    <span class="desc">真正核密码、管 MFA 的地方。CAS 委托认证到它，它在自己域名下也记住了这个用户</span></div></div>
+  <div class="step"><span class="n">2</span><div>
+    <strong>第②层 · CAS 会话</strong>（TGT + TGC）
+    <span class="desc">门卫/翻译层。应用只见得到它；它凭第③层的认证结果给用户记账</span></div></div>
+  <div class="step"><span class="n">1</span><div>
+    <strong>第①层 · 应用本地会话</strong>（各应用自己的 Cookie + Session）
+    <span class="desc">OA、Wiki 各一份，互不知晓。SLO 通知就是发到这里</span></div></div>
+</div>
+
+<p>两个直接推论，都和你们的 OIDC 迁移相关：</p>
+
+<ul>
+  <li><strong>登出的传导问题</strong>：用户在 CAS 登出 → SLO 通知到各应用（第①层）✓；但第②层到第③层——CAS 的登出会不会传导到 PingFederate、把 PF 的会话也销毁——取决于委托认证链路的登出配置。如果没传导，用户下次进来可能<strong>直接被 PF 免密放行</strong>，「登出假死」的灵异事件就是这么来的。（这是给你留的实地验证项之二：登出后重新登录，看还要不要输密码。）</li>
+  <li><strong>迁移的存量会话问题</strong>：切换协议那天，三层里已经装着海量活会话。TGC 认的是 CAS 这门语言，应用改说 OIDC 后旧的 TGC 和本地会话就成了<strong>会话孤岛</strong>。第 5 课的灰度方案就围绕「怎么让孤岛无害地自然消亡」展开。</li>
+</ul>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§5</span>票据视角的排错表</h2>
+
+<table>
+  <thead><tr><th>症状</th><th>哪张票据死了/没到位</th><th>先查什么</th></tr></thead>
+  <tbody>
+    <tr><td>隔一会儿就要重新输密码</td><td>TGT 闲置超时过短</td><td>服务器 TGT 超时策略（闲置/最长寿命）；是「刚登录就掉」还是「隔天掉」，性质完全不同</td></tr>
+    <tr><td>登出了 A 应用，B 应用还在登录态</td><td>SLO 通知未生效</td><td>B 是否实现了登出通知处理端点；对照 CAS 日志看 POST 发送结果（fire-and-forget，静默失败很常见）</td></tr>
+    <tr><td>登出后没有跳回指定页面</td><td>—（非票据问题）</td><td><code>/logout?service=…</code> 的目标地址是否在白名单；服务器是否启用了登出后重定向</td></tr>
+    <tr><td>新应用接入即「未授权」</td><td>ST 没签发</td><td>回顾第 2 课排错表：回调地址（service）登记问题</td></tr>
+    <tr><td>「登出假死」：登出后重新进入直接免密</td><td>上层会话残留</td><td>§4：PF 层会话是否被传导销毁；逐层清 Cookie 复测定位是哪层在「放水」</td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§6</span>检验一下</h2>
+<p>不要回翻，凭记忆作答。</p>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q1</span>三件套中，TGT 保存在哪里？</p>
+  <div class="quiz-options">
+    <button type="button">认证服务器</button>
+    <button type="button">浏览器本地</button>
+    <button type="button">应用数据库</button>
+    <button type="button">回调地址里</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="TGT 是 SSO 会话本体，住在 CAS 服务器的存储里；浏览器只持有指向它的 TGC 门牌号。"
+       data-bad="TGT 住在 CAS 服务器里。浏览器只保存 TGC（指向 TGT 的 Cookie），应用只经手一次性的 ST。"></div>
+</div>
+
+<div class="quiz" data-answer="1">
+  <p class="quiz-q"><span class="qno">Q2</span>三件套中，以浏览器 Cookie 形态存在的是？</p>
+  <div class="quiz-options">
+    <button type="button">TGT</button>
+    <button type="button">TGC</button>
+    <button type="button">PGT</button>
+    <button type="button">JWT</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="TGC 全称 Ticket-Granting Cookie——名字里就带着 Cookie，种在 CAS 的域名下，是 TGT 在浏览器侧的门牌号。"
+       data-bad="以 Cookie 形态存在的是 TGC（Ticket-Granting Cookie）。TGT 在服务器，ST/PGT 在 URL 里转瞬即逝；JWT 是 OIDC 世界的令牌格式，不属于 CAS 票据家族。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q3</span>单点登出时，CAS 把登出通知发往各应用，走的是哪条通道？</p>
+  <div class="quiz-options">
+    <button type="button">后台逐站推送</button>
+    <button type="button">浏览器代转发</button>
+    <button type="button">邮件逐一通知</button>
+    <button type="button">等应用来查询</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="规范规定：TGT 被显式销毁时，CAS 必须向本会话所有拿到过 ST 的应用地址 POST 登出通知（SAML LogoutRequest XML），且为 fire-and-forget——发送失败也忽略。"
+       data-bad="CAS 走后端通道，主动向每个发过 ST 的应用 POST 登出通知；不是浏览器转发，应用也不来查询。正因 fire-and-forget，某个应用没处理好就出现「登出不彻底」。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q4</span>某应用没实现登出通知的处理端点，用户在别处点登出后，该应用的本地会话会怎样？</p>
+  <div class="quiz-options">
+    <button type="button">本地会话残留</button>
+    <button type="button">本地会话同步</button>
+    <button type="button">票据自动作废</button>
+    <button type="button">密码自动清除</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="本地会话由应用自己管理，CAS 碰不着；通知没人处理，会话就残留——用户回到该应用仍是登录态，这是 SLO 的经典漏洞。"
+       data-bad="应用的本地会话只有应用自己能销毁。没实现处理端点 = 通知无人接收 = 会话残留，用户回去依然是登录态。"></div>
+</div>
+
+<!-- ======================================================= -->
+<div class="summary">
+  <h2>本课要点</h2>
+  <ol>
+    <li><strong>三件套各就各位</strong>：TGT 在服务器（SSO 会话本体）、TGC 在浏览器（TGT 的门牌号）、ST 在 URL（每应用一张、一次性、分钟级）。</li>
+    <li><strong>TGT 活小时、ST 活分钟</strong>；TGT 死于闲置超时、最长寿命或主动登出（<code>/logout</code>）。</li>
+    <li><strong>单点登出靠后端逐站 POST</strong>，fire-and-forget——「登出不彻底」先查应用有没有实现处理端点。</li>
+    <li><strong>你们架构里一次登录 = 三层会话</strong>（应用本地 / CAS / PingFederate）；登出传导与存量会话，是迁移专题的两大核心议题。</li>
+  </ol>
+</div>
+
+<h2>推荐阅读</h2>
+<p><strong>主要资源：</strong><a href="https://apereo.github.io/cas/development/protocol/CAS-Protocol-Specification.html">CAS Protocol 3.0 Specification</a> 中 <code>/logout</code> 与 Single Logout 两节——你已经具备读它的全部前置知识，重点看 LogoutRequest XML 长什么样。</p>
+<p><strong>补充：</strong><a href="https://apereo.github.io/cas/">Apereo CAS 官方文档</a>的 SSO Session Management 章节——TGT 超时策略（闲置/最长寿命）属于服务器配置，协议规范不管这一段。</p>
+
+<div class="next-steps">
+  <p><strong>下一课预告 · 第 4 课：OIDC——PingFederate 的原生语言</strong><br>
+  你们迁移的终点站。从 OAuth 2.0 的「授权」讲起，走授权码流程的完整时序，拆开 ID Token（JWT）看里面装了什么、怎么验签。学完你会发现：它和 CAS 时序惊人地同构，只是票据换成了 Token。</p>
+  <p><strong>💬 有疑问随时问我。</strong>另外别忘了两个实地验证作业：① 登录时数一数 302 跳了几次、登录页是哪层渲染的；② 登出后再进系统要不要重新输密码（检验 PF 层会话有没有被传导销毁）。把结果告诉我，第 4、5 课就用你公司的真实数据讲课。</p>
+</div>
+
+<footer>
+  <p>上一课：<a href="0002-cas-login-sequence-walkthrough.html">以 CAS 为例走完一次单点登录</a> ·
+     速查：<a href="../reference/auth-glossary.html">术语表</a> ·
+     <a href="../reference/auth-glossary.html#cas">CAS 专有术语</a></p>
+  <p>SSO 认证课程 · 第 3 课 / 共 6 课（计划）</p>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

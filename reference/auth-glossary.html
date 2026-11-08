@@ -89,8 +89,8 @@
       <td>IdP 认证完成后把用户送回应用的地址。<strong>是地址、是目的地</strong>，即第二次重定向要去的地方。第一次重定向时它作为参数告知 IdP；必须事先在 IdP 登记，否则拒绝（防止凭证被送到攻击者网站）。</td>
       <td>CAS 叫 <code>service</code>，OIDC 叫 <code>redirect_uri</code>，SAML 叫 ACS。集成时最常见的报错来源之一。<span class="lesson-tag">0002</span></td></tr>
     <tr id="slo"><td>单点登出<span class="en">SLO · Single Log-Out</span></td>
-      <td>在一处退出，所有已登录应用一起退出。</td>
-      <td>比单点登录难做得多。<span class="lesson-tag">0003</span></td></tr>
+      <td>在一处退出，所有已登录应用一起退出。CAS 的做法：TGT 被销毁时，由 CAS 向本会话所有拿到过 ST 的应用<strong>后端 POST</strong> 登出通知（SAML LogoutRequest XML），应用需实现处理端点销毁本地会话；通知为 fire-and-forget，失败即静默。</td>
+      <td>比单点登录难做得多；「登出不彻底」先查应用端点。<span class="lesson-tag">0003</span></td></tr>
   </tbody>
 </table>
 
