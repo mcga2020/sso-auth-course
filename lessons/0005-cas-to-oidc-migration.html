@@ -21,8 +21,8 @@
 
 <p>到此刻，你手里已经有全部零件：CAS 时序（第 2 课）、会话分层（第 3 课）、OIDC 流程（第 4 课）。这一课只做一件事——<strong>组装</strong>：你们公司的登录体系怎么从「应用 → CAS 层 → PingFederate」搬到一个新形态。</p>
 
-<p class="aside"><span class="aside-title">先说结论</span>
-最可能的终局：<strong>PingFederate 不动，应用从对接 CAS 层改为直连 PF 的 OIDC 端点，CAS 层逐步退役</strong>。密码核对始终在 PF，用户感知不到换心脏——这也是这条迁移路线最大的优点。</p>
+<p class="aside"><span class="aside-title">先说结论（本课 = 阶段一）</span>
+本课方案：<strong>应用从对接 CAS 层改为直连 PF 的 OIDC 端点，CAS 层逐步退役</strong>。它同时也是整个迁移的<strong>阶段一</strong>——公司终局是自研 IdP 接棒 PF（阶段二）。两段式的精髓：阶段一让应用从此<strong>只认 OIDC 标准</strong>，阶段二换 IdP 时，应用侧就从「改代码」降级成「改配置」。密码核对位置不变（先 PF、后新 IdP 委托现有账号源），用户全程无感。</p>
 
 <!-- ======================================================= -->
 <h2><span class="secno">§1</span>目标架构：搬家前 vs 搬家后</h2>
@@ -30,9 +30,12 @@
 <pre><code>现状（三层）
   应用 ──CAS 协议──▶ Apereo CAS ──委托(SAML/OIDC)──▶ PingFederate
 
-目标（两层）
+阶段一目标（本课）：拆掉 CAS 层
   应用 ──OIDC 直连──▶ PingFederate        ← /as/authorization.oauth2
                                           ← /as/token.oauth2
+
+阶段二目标（终局）：自研 IdP 接棒 PF
+  应用 ──OIDC 直连──▶ 自研 IdP ──核对密码──▶ 现有账号源（AD/LDAP/用户库）
 
 中间态（双轨并存，本课主角）
   应用A ──CAS──▶ CAS 层 ──委托──▶ PF      ← 还没搬的
@@ -100,6 +103,7 @@
     <tr><td><strong>公钥轮转</strong></td><td>某天凌晨起全部验签失败</td><td>别把 JWKS 公钥写死在配置里——按发现端点动态拉取并定期刷新</td></tr>
     <tr><td><strong>登出语义变化</strong></td><td>「登出了还登着」投诉增加</td><td>CAS 的 SLO 是自动逐站通知；OIDC 默认没有等价物，需在 PF 配置登出端点（RP-initiated / front/back-channel 概念，落地时查 PF 文档），双轨期尤其要测</td></tr>
     <tr><td><strong>代理票据（PT）应用</strong></td><td>服务间转授场景断掉</td><td>CAS 的 PGT/PT 在 OIDC 没有直接对应物；若真有应用在用，需单独设计（如 client credentials 流），提前排查</td></tr>
+    <tr><td><strong>阶段二预告：issuer 更替</strong></td><td>未来换自研 IdP 时全部验签失败</td><td>应用侧从一开始就按<strong>发现端点动态获取配置</strong>（而非写死每个 URL）；<code>sub</code> 用户标识在两个 IdP 间保持同一取值体系——阶段一的映射纪律，决定阶段二是改配置还是改代码</td></tr>
   </tbody>
 </table>
 
