@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 2 课 · 以 CAS 为例：逐个请求走完一次单点登录</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 2 课 · SSO 骨架实战</p>
+<h1>以 CAS 为例：逐个请求走完一次单点登录</h1>
+<p class="subtitle">每一次跳转都标清：谁发起、去哪里、带了什么参数。</p>
+
+<div class="lesson-meta">
+  <span>约 12 分钟</span>
+  <span>前置：<a href="0001-authn-authz-and-sso-map.html">第 1 课</a></span>
+  <span>速查：<a href="../reference/auth-glossary.html">术语表</a></span>
+</div>
+
+<p>你们项目正在用 CAS——这一课走的流程，就是你明天打开公司系统时真实发生的流程。学完它，登录跳转失败时你就能说出「卡在第几步」。</p>
+
+<p>上一课你追问过「<strong>重定向和回调地址有什么区别</strong>」。这一课就是那个问题的完整答案：<mark>第一次重定向「带上」回调地址作为参数，第二次重定向「前往」回调地址</mark>。看流程时请盯着这两次跳转。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§1</span>出场角色</h2>
+
+<table>
+  <thead><tr><th>角色</th><th>本课中的地址</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>浏览器</td><td>—</td><td>你。它手里的 <a href="../reference/auth-glossary.html#cookie">Cookie</a> 决定了免不免密。</td></tr>
+    <tr><td>应用 A（OA）</td><td><code>https://oa.company.com</code><br>回调地址：<code>/cas/callback</code></td><td>业务系统，<a href="../reference/auth-glossary.html#sp">CAS 里的「service」</a>。不碰密码，只验票据。</td></tr>
+    <tr><td>应用 B（Wiki）</td><td><code>https://wiki.company.com</code></td><td>第二幕出场，用来演示免密。</td></tr>
+    <tr><td>CAS 服务器</td><td><code>https://login.company.com</code></td><td>认证中心（IdP），全体系唯一核对密码的地方。</td></tr>
+  </tbody>
+</table>
+
+<p class="aside"><span class="aside-title">开工前的一个前提</span>
+应用 A 的回调地址 <code>https://oa.company.com/cas/callback</code> 必须<strong>事先在 CAS 服务端登记</strong>（服务注册表）。CAS 只把票据送往白名单里的地址——防止有人把回调参数改成自己的网站、白拿用户的登录凭证。这是后面排错的第一嫌疑点。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§2</span>第一幕：第一次登录（应用 A）</h2>
+
+<div class="seq">
+  <div class="seq-title">图 1 · 完整时序：从访问 OA 到登录完成（共 7 步，含两次 302 重定向）</div>
+
+  <div class="step"><span class="n">1</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用 A</span>：<code>GET https://oa.company.com/</code>
+    <span class="desc">没带应用的会话 Cookie——应用 A 查不到本地 Session</span></div></div>
+
+  <div class="step"><span class="n">2</span><div>
+    <span class="to">应用 A</span> <span class="arrow">──302──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">CAS</span>【<strong>第一次重定向</strong>：带上回调地址】
+    <span class="desc"><code>Location: https://login.company.com/cas/login?service=https%3A%2F%2Foa.company.com%2Fcas%2Fcallback</code></span></div></div>
+
+  <div class="step"><span class="n">3</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">CAS</span>：请求 <code>/cas/login</code>，<strong>没带 TGC Cookie</strong>（第一次来）→ CAS 返回登录页
+    <span class="desc">你输入用户名 + 密码提交——全体系唯一一次</span></div></div>
+
+  <div class="step"><span class="n">4</span><div>
+    <span class="to">CAS</span>（内部）：核对密码 ✓ → 创建 <a href="../reference/auth-glossary.html#tgt">TGT</a>（SSO 会话）
+    <span class="desc">同时 <code>Set-Cookie: TGC=…</code>（只种在 <code>login.company.com</code> 域）→ 并签发一次性票据 <code>ST-abc123</code></span></div></div>
+
+  <div class="step"><span class="n">5</span><div>
+    <span class="to">CAS</span> <span class="arrow">──302──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用 A</span>【<strong>第二次重定向</strong>：前往回调地址】
+    <span class="desc"><code>Location: https://oa.company.com/cas/callback?ticket=ST-abc123</code>——票据作为 <code>ticket</code> 参数抵达</span></div></div>
+
+  <div class="step"><span class="n">6</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用 A</span>：<code>GET /cas/callback?ticket=ST-abc123</code>
+    <span class="desc">应用 A 的<strong>后端</strong>（不经浏览器）直接请求 CAS：<code>GET /serviceValidate?service=…&amp;ticket=ST-abc123</code></span></div></div>
+
+  <div class="step"><span class="n">7</span><div>
+    <span class="to">CAS</span> <span class="arrow">──▶</span> <span class="to">应用 A</span>：返回 XML——<code>&lt;cas:authenticationSuccess&gt;&lt;cas:user&gt;zhangsan&lt;/cas:user&gt;…&lt;/cas:authenticationSuccess&gt;</code>
+    <span class="desc">应用 A 验证通过 → 创建本地 Session → <code>Set-Cookie</code> → 登录完成，此后与第 1 课图 1 完全相同</span></div></div>
+</div>
+
+<p class="aside"><span class="aside-title">看懂第 2 步那串奇怪的字</span>
+<code>https%3A%2F%2F…</code> 是回调地址的 <strong>URL 编码</strong>（<code>:</code> → <code>%3A</code>，<code>/</code> → <code>%2F</code>）——它作为参数嵌进另一个 URL，就必须编码。规范对 <code>service</code> 的定义就是「<a href="https://apereo.github.io/cas/development/protocol/CAS-Protocol-Specification.html">客户端要访问的应用标识，几乎所有情况下就是应用的 URL</a>」。记住它，排错时你会反复见到它。</p>
+
+<h3>第 6 步为什么走「后端通道」？</h3>
+
+<p>注意第 6 步的箭头：票据校验是<strong>应用后端与 CAS 之间的直接 HTTP 调用</strong>，不经过浏览器。这正是 CAS 名字的由来——Central <em>Authentication</em> Service，也是它和 SAML/OIDC 的鲜明区别（后两者把签名凭证发给应用本地验）。把校验放后端通道，浏览器从头到尾接触不到校验结果 XML，伪造难度大大提高。</p>
+
+<h3>ST 票据的三条铁律（规范原文）</h3>
+
+<p>第 5～6 步里那串 <code>ST-abc123</code> 不是普通字符串，<a href="https://apereo.github.io/cas/development/protocol/CAS-Protocol-Specification.html">规范</a>给它立了三条规矩，排错时全靠它们：</p>
+
+<table>
+  <thead><tr><th>铁律</th><th>规范要求</th><th>排错意义</th></tr></thead>
+  <tbody>
+    <tr><td><strong>一次性</strong></td><td>「只对一次校验尝试有效」，校验后立即作废，之后同一票据的所有校验<strong>必须失败</strong></td><td>用户刷新回调页报「ticket 已使用」→ 正常行为，不是 bug</td></tr>
+    <tr><td><strong>短时效</strong></td><td>有效期「建议不超过五分钟」</td><td>极端情况下校验太慢会过期</td></tr>
+    <tr><td><strong>绑定应用</strong></td><td>只对签发时指定的 <code>service</code> 有效；校验时 <code>service</code> 不匹配 → 返回 <code>INVALID_SERVICE</code>，票据作废</td><td>校验时的 service 与登录时必须<strong>逐字符一致</strong>（编码、末尾斜杠都算）</td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§3</span>第二幕：第二个应用免密登录（应用 B）</h2>
+
+<p>时间来到下午。你已在 OA 登录过，现在打开 Wiki（应用 B）：</p>
+
+<div class="seq">
+  <div class="seq-title">图 2 · 免密的真相：TGC Cookie 只在 CAS 的域名下发挥作用</div>
+
+  <div class="step"><span class="n">1</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用 B</span>：无本地 Session → <span class="arrow">──302──▶</span> <span class="to">CAS</span>【第一次重定向，与第一幕第 2 步同构】
+    <span class="desc"><code>/cas/login?service=https%3A%2F%2Fwiki.company.com%2Fcas%2Fcallback</code>——注意回调地址换成了 Wiki 自己的</span></div></div>
+
+  <div class="step"><span class="n">2</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">CAS</span>：这次请求的域名是 <code>login.company.com</code> → <strong>浏览器自动带上 TGC Cookie</strong>
+    <span class="desc">第 1 课讲过：Cookie 只发回它所属的域名——这个「限制」此刻成了机制本身</span></div></div>
+
+  <div class="step"><span class="n">3</span><div>
+    <span class="to">CAS</span>（内部）：TGC → 找到 TGT，有效 → <strong>不出登录页</strong>，直接签发新票据 <code>ST-def456</code> → <span class="arrow">──302──▶</span> 回 Wiki【第二次重定向】
+    <span class="desc">规范原话：持有有效 TGC 时可凭它签发新 ST，「以代替主凭证（密码）」</span></div></div>
+
+  <div class="step"><span class="n">4</span><div>
+    <span class="to">应用 B</span>：后端校验 <code>ST-def456</code> ✓ → 创建本地 Session → 免密完成
+    <span class="desc">全程没有出现密码输入框</span></div></div>
+</div>
+
+<p>于是「单点登录」的谜底完全揭开：密码只在第一幕第 3 步出现过一次；共享的登录状态，从头到尾只存在于 <code>login.company.com</code> 一个域名下的 TGC Cookie + CAS 服务器上的 TGT。<mark>CAS 没有打破 Cookie 的域名隔离，而是让所有应用都把用户送到同一个域名去。</mark></p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§4</span>排错地图：卡住了，先查哪一环</h2>
+
+<p>把上面的时序倒过来用，就是排错路径。你们项目用 CAS，这张表建议收藏：</p>
+
+<table>
+  <thead><tr><th>症状</th><th>卡在哪一步</th><th>先查什么</th></tr></thead>
+  <tbody>
+    <tr><td>跳到 CAS 后提示应用未授权（service not authorized）</td><td>第 2 步</td><td>回调地址没在 CAS 登记，或登记值与 <code>service</code> 参数不一致——<strong>逐字符比对</strong>：协议、域名、端口、路径、末尾斜杠</td></tr>
+    <tr><td>回调收到 ticket，但校验返回 <code>INVALID_SERVICE</code></td><td>第 6 步</td><td>校验时传的 <code>service</code> 与登录时不一致（URL 编码差异、末尾斜杠是惯犯）</td></tr>
+    <tr><td>校验报「ticket 已被使用 / 过期」</td><td>第 6 步</td><td>是否有人/脚本重复刷新回调页（ST 一次性，属正常防护）；校验请求是否拖过了有效期</td></tr>
+    <tr><td>每个应用都要求重新输密码</td><td>第二幕第 2 步</td><td>TGC 没种上或没送达：查 Cookie 的 Secure/域/路径属性、浏览器是否拦了 Cookie、TGT 是否已过期</td></tr>
+    <tr><td>校验明明成功，应用还是当没登录</td><td>第 7 步</td><td>应用<strong>自己的</strong>本地会话 Cookie 域/路径配错——认证协议没问题，是第 1 课图 1 那套出了岔子</td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§5</span>检验一下</h2>
+<p>不要回翻，凭记忆作答。</p>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q1</span>第一幕第 2 步，应用 A 发出的第一次重定向，目的地是？</p>
+  <div class="quiz-options">
+    <button type="button">前往认证中心</button>
+    <button type="button">返回应用本地</button>
+    <button type="button">读取数据库表</button>
+    <button type="button">加载静态资源</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="第一次重定向把浏览器送往 CAS 的 /login，同时在 service 参数里「带上」回调地址。第二次重定向才「前往」回调地址。"
+       data-bad="第一次重定向的目的地是 CAS（认证中心）的登录地址；它还把回调地址作为 service 参数一并告知 CAS。"></div>
+</div>
+
+<div class="quiz" data-answer="1">
+  <p class="quiz-q"><span class="qno">Q2</span>ST 票据的校验（/serviceValidate）走的是哪条通道？</p>
+  <div class="quiz-options">
+    <button type="button">浏览器地址栏</button>
+    <button type="button">应用后端直达</button>
+    <button type="button">登录页面内嵌</button>
+    <button type="button">邮件附件携带</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="应用后端拿 ST 直接请求 CAS 校验接口，不经浏览器——浏览器从头到尾见不到校验结果 XML。这是 CAS 的标志性设计。"
+       data-bad="票据校验是应用后端与 CAS 之间的直接 HTTP 调用，不经过浏览器；浏览器只负责带着 ticket 访问回调地址。"></div>
+</div>
+
+  <div class="quiz" data-answer="3">
+  <p class="quiz-q"><span class="qno">Q3</span>第二幕里，Wiki 免密成功。浏览器访问下列哪个域名时自动带上了 Cookie？</p>
+  <div class="quiz-options">
+    <button type="button">inbox.company.com</button>
+    <button type="button">cloud.company.com</button>
+    <button type="button">group.company.com</button>
+    <button type="button">login.company.com</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="TGC 种在 CAS 的域名（login.company.com）下。第二幕第 1 步把用户重定向到 CAS，浏览器访问该域名时才自动带上 TGC——CAS 因此认出已登录，跳过密码。"
+       data-bad="TGC 属于 CAS 的域名 login.company.com。Wiki 的免密恰恰发生在用户被重定向到 CAS、浏览器带上 TGC 的那一刻。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q4</span>同一个 ST 票据提交第二次校验，结果会是？</p>
+  <div class="quiz-options">
+    <button type="button">校验直接失败</button>
+    <button type="button">校验依然成功</button>
+    <button type="button">返回上次缓存</button>
+    <button type="button">要求重新登录</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="规范要求 ST「只对一次校验尝试有效」，用完立即作废——这是防重放（replay）的关键设计。刷新回调页报 ticket 已使用，正是它在正常工作。"
+       data-bad="ST 是一次性的：首次校验后立即作废，再次校验必失败。这条铁律防的是有人截获票据重放。"></div>
+</div>
+
+<!-- ======================================================= -->
+<div class="summary">
+  <h2>本课要点</h2>
+  <ol>
+    <li>一次 CAS 登录 = <strong>两次 302 重定向 + 一次后端校验</strong>：第一次重定向「带上」回调地址（service 参数），第二次重定向「前往」回调地址（ticket 参数随 URL 抵达）。</li>
+    <li>票据校验走<strong>后端直达通道</strong>；ST 三条铁律：一次性、短时效（≤5 分钟）、绑定 service。</li>
+    <li>免密的真相：TGC 只种在 CAS 域名下，所有应用都把用户送到那个域名——Cookie 域名隔离没被打破，反而成了机制本身。</li>
+  </ol>
+</div>
+
+<h2>推荐阅读</h2>
+<p><strong>主要资源：</strong><a href="https://apereo.github.io/cas/development/protocol/CAS-Protocol-Specification.html">CAS Protocol 3.0 Specification</a>（英文）——直接读 §2.1 <code>/login</code> 与 <code>/serviceValidate</code> 两节的参数表。你已经能看懂里面 90% 的内容了，把本课图 1 与规范逐条对照，会有「原来如此」的快感。</p>
+<p><strong>补充：</strong><a href="../reference/auth-glossary.html#cas">术语表 · CAS 专有术语</a>——本课出现了 TGT、TGC、ST 三个票据名词的初阶版，下节课深挖它们的生命周期。</p>
+
+<div class="next-steps">
+  <p><strong>下一课预告 · 第 3 课：CAS 票据体系深入</strong><br>
+  TGT、TGC、ST 三种票据各自的生命周期与「谁给谁发」；单点登出（Single Log-Out）为什么比单点登录难；以及你们迁移 OIDC 前必须弄懂的 CAS 会话边界。</p>
+  <p><strong>💬 有疑问随时问我。</strong>做完上面的测验告诉我对了几个；公司 CAS 是自己运维的 Apereo CAS，还是云服务？这影响第 3 课要不要讲服务端配置。</p>
+</div>
+
+<footer>
+  <p>上一课：<a href="0001-authn-authz-and-sso-map.html">认证 vs 授权</a> ·
+     速查：<a href="../reference/auth-glossary.html">术语表</a> ·
+     <a href="../reference/auth-glossary.html#cas">CAS 专有术语</a></p>
+  <p>SSO 认证课程 · 第 2 课 / 共 6 课（计划）</p>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
