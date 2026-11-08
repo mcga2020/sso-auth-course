@@ -19,7 +19,8 @@
   <span>速查：<a href="../reference/auth-glossary.html">术语表</a></span>
 </div>
 
-<p>你们项目正在用 CAS——这一课走的流程，就是你明天打开公司系统时真实发生的流程。学完它，登录跳转失败时你就能说出「卡在第几步」。</p>
+<p class="aside"><span class="aside-title">与你公司现状的对照（2026-11-08 勘误）</span>
+你们当前的登录体系实为 <strong>PingFederate + OpenToken</strong>（Ping 专有令牌），链路中没有 Apereo CAS——所以本课不是你家系统的实录。为什么仍从 CAS 学起？它是三大协议中最简洁的骨架标本，且迁移阶段一（OpenToken → OIDC）时，你要向团队讲清「专有令牌 vs 标准协议」的差别——CAS 与 OIDC 的对照（第 4 课）正是最好的思维训练。本课所有 CAS 知识按协议教材掌握即可。</p>
 
 <p>上一课你追问过「<strong>重定向和回调地址有什么区别</strong>」。这一课就是那个问题的完整答案：<mark>第一次重定向「带上」回调地址作为参数，第二次重定向「前往」回调地址</mark>。看流程时请盯着这两次跳转。</p>
 

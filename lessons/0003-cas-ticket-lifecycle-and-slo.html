@@ -89,9 +89,12 @@ CAS 协议里还有代理票据 <code>PGT</code>/<code>PT</code>（让应用 A �
 <p>另外，<code>/logout</code> 只接受一个可选参数 <code>service</code>——登出后把浏览器自动送去哪个地址（是否放行由服务器配置决定，同样受白名单约束）。</p>
 
 <!-- ======================================================= -->
-<h2><span class="secno">§4</span>你们公司的两层会话（真实架构）</h2>
+<h2><span class="secno">§4</span>多层会话（含勘误：你们公司的真实层数）</h2>
 
-<p>现在把第 2 课结尾的架构图升级成<strong>会话全景</strong>——用户登录后，实际上同时存在三层会话：</p>
+<p class="aside"><span class="aside-title">2026-11-08 勘误</span>
+本节最初按「应用经 CAS 协议对接 PF」讲解。经确认，你们现状是<strong>应用经 OpenToken 对接 PF</strong>（SAML 联合）：中间没有独立的 CAS 层，但「一次登录、多层会话」的模型完全成立——把下图的第②层从「CAS 的 TGT/TGC」替换为「PF 自己的会话（Cookie + 服务端会话，OpenToken 由它签发）」即可；若 PF 上游还联邦了别的 IdP，则再多一层。多层会话的登出传导与迁移风险分析照旧适用。</p>
+
+<p>现在把登录后的会话结构画成<strong>会话全景</strong>——用户登录后，实际上同时存在多层会话：</p>
 
 <div class="seq">
   <div class="seq-title">图 2 · 一次登录，三层会话同时建立</div>

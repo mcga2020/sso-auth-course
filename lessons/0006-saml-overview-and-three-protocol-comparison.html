@@ -19,7 +19,7 @@
   <span>速查：<a href="../reference/auth-glossary.html">术语表</a></span>
 </div>
 
-<p>SAML 是三巨头里资历最老的（2005 年 OASIS 标准）。你们大概率不用亲手对接它，但有两个理由值得花十分钟认识：<strong>第一</strong>，你们 CAS 层与 PingFederate 之间的委托链路，背后很可能就是说 SAML 的；<strong>第二</strong>，老牌企业 SaaS 至今遍地 SAML——读懂它，公司里任何登录体系你都叫得出名字。</p>
+<p>SAML 是三巨头里资历最老的（2005 年 OASIS 标准）。你们大概率不用亲手对接它，但有两个理由值得花十分钟认识：<strong>第一</strong>，你们当前「PF + OpenToken 的 SAML 联合登录」里，SAML 正是联邦环节的幕后语言——看懂它，自家系统的说明书就通读了一遍；<strong>第二</strong>，老牌企业 SaaS 至今遍地 SAML——读懂它，公司里任何登录体系你都叫得出名字。</p>
 
 <!-- ======================================================= -->
 <h2><span class="secno">§1</span>SAML 30 秒定位</h2>
@@ -164,7 +164,7 @@
     <li><strong>一个骨架</strong>：跳转 → 登录/免密 → 带一次性凭证回 → 验证 → 建本地会话。三协议皆此骨架的变奏。</li>
     <li><strong>一个原则</strong>：认证只发生在一处（你们的 PF）；Cookie 域名隔离不是障碍，是 SSO 的机制本身。</li>
     <li><strong>一套方法论</strong>：先找两次重定向，再问「凭证是什么、谁验证、怎么防伪」——任何登录体系皆可拆解。</li>
-    <li><strong>一份行动方案</strong>：第 5 课七步清单 + 坑点表，就是你们 CAS → OIDC 迁移的起点。</li>
+    <li><strong>一份行动方案</strong>：第 5 课七步清单 + 坑点表，就是你们 OpenToken → OIDC → 自研 IdP 两段迁移的起点。</li>
   </ol>
 </div>
 

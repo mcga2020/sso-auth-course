@@ -246,6 +246,9 @@
     <tr><td>Kerberos</td>
       <td>基于票据的网络认证协议，Windows 域登录的核心。</td>
       <td>企业内网 SSO</td></tr>
+    <tr><td>OpenToken<span class="en">Ping 专有 · OTK</span></td>
+      <td>PingFederate 的<strong>私有令牌格式</strong>：AES 共享对称密钥加密的键值对，以 HTTP POST 的 <code>opentoken</code> 参数交付应用；应用须用 Ping 的 Agent/Integration Kit（Java/.NET/PHP）解密消费。<strong>非开放标准</strong>——这正是迁移到 OIDC 要拆掉的供应商锁定。</td>
+      <td>见 <a href="https://docs.pingidentity.com/pingfederate/13.1/administrators_reference_guide/pf_opentoken_adapt.html">PF OpenToken Adapter 文档</a></td></tr>
     <tr><td>SSO 协议<span class="en">CAS · SAML · OIDC</span></td>
       <td>把认证交给 IdP，跨应用共享登录状态。</td>
       <td>多系统统一登录 ← <strong>本课程主线</strong></td></tr>

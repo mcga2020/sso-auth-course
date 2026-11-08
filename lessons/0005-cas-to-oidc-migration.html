@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>第 5 课 · CAS → OIDC 迁移专题</title>
+<title>第 5 课 · SSO 迁移专题：从 OpenToken 到 OIDC 再到自研</title>
 <link rel="stylesheet" href="../assets/course.css">
 </head>
 <body>
 <main>
 
 <p class="kicker">第 5 课 · 迁移实战</p>
-<h1>CAS → OIDC 迁移专题</h1>
+<h1>SSO 迁移专题：从 OpenToken 到 OIDC 再到自研</h1>
 <p class="subtitle">双轨并存、灰度切换、坑点清单——把前面四课的知识组装成一份行动方案。</p>
 
 <div class="lesson-meta">
@@ -19,18 +19,18 @@
   <span>速查：<a href="../reference/auth-glossary.html">术语表</a></span>
 </div>
 
-<p>到此刻，你手里已经有全部零件：CAS 时序（第 2 课）、会话分层（第 3 课）、OIDC 流程（第 4 课）。这一课只做一件事——<strong>组装</strong>：你们公司的登录体系怎么从「应用 → CAS 层 → PingFederate」搬到一个新形态。</p>
+<p>到此刻，你手里已经有全部零件：协议时序（第 2 课）、会话分层（第 3 课）、OIDC 流程（第 4 课）。这一课只做一件事——<strong>组装</strong>：你们公司的登录体系怎么从「应用 ◀OpenToken▶ PingFederate（SAML 联合）」搬到一个新形态。</p>
 
 <p class="aside"><span class="aside-title">先说结论（本课 = 阶段一）</span>
-本课方案：<strong>应用从对接 CAS 层改为直连 PF 的 OIDC 端点，CAS 层逐步退役</strong>。它同时也是整个迁移的<strong>阶段一</strong>——公司终局是自研 IdP 接棒 PF（阶段二）。两段式的精髓：阶段一让应用从此<strong>只认 OIDC 标准</strong>，阶段二换 IdP 时，应用侧就从「改代码」降级成「改配置」。密码核对位置不变（先 PF、后新 IdP 委托现有账号源），用户全程无感。</p>
+本课方案：<strong>应用从 Ping 专有 OpenToken 接入，切换为标准 OIDC 直连 PF</strong>——这步的深层价值是<strong>拆掉专有 SDK 锁定</strong>：从此应用说开放标准，不再依赖 Ping 的 Integration Kit。它同时也是整个迁移的<strong>阶段一</strong>——公司终局是自研 IdP 接棒 PF（阶段二）。两段式的精髓：阶段一让应用只认 OIDC 标准，阶段二换 IdP 时，应用侧就从「改代码」降级成「改配置」。密码核对位置不变，用户全程无感。</p>
 
 <!-- ======================================================= -->
 <h2><span class="secno">§1</span>目标架构：搬家前 vs 搬家后</h2>
 
-<pre><code>现状（三层）
-  应用 ──CAS 协议──▶ Apereo CAS ──委托(SAML/OIDC)──▶ PingFederate
+<pre><code>现状（Ping 专有令牌接入）
+  应用 ◀──OpenToken（POST opentoken，Ping 专有 SDK）──▶ PingFederate（SAML 联合）
 
-阶段一目标（本课）：拆掉 CAS 层
+阶段一目标（本课）：专有令牌 → 标准 OIDC
   应用 ──OIDC 直连──▶ PingFederate        ← /as/authorization.oauth2
                                           ← /as/token.oauth2
 
@@ -38,29 +38,29 @@
   应用 ──OIDC 直连──▶ 自研 IdP ──核对密码──▶ 现有账号源（AD/LDAP/用户库）
 
 中间态（双轨并存，本课主角）
-  应用A ──CAS──▶ CAS 层 ──委托──▶ PF      ← 还没搬的
-  应用B ──OIDC──────────────────▶ PF      ← 已搬的</code></pre>
+  应用A ──OpenToken──▶ PF                ← 还没搬的
+  应用B ──OIDC────────▶ PF               ← 已搬的</code></pre>
 
-<p>注意中间态里：<strong>CAS 层和 PF 都活着</strong>，新旧应用各走各的门。迁移的全部难度都浓缩在这个「双轨并存期」——通常持续数周到数月。</p>
+<p>注意中间态里：<strong>OpenToken 旧路径和 OIDC 新路径都活着</strong>，新旧应用各走各的门。迁移的全部难度都浓缩在这个「双轨并存期」——通常持续数周到数月。</p>
 
 <!-- ======================================================= -->
 <h2><span class="secno">§2</span>双轨期的核心难题：会话孤岛</h2>
 
-<p>第 3 课埋的伏笔这里回收。切换日，海量用户身上挂着三层旧会话：</p>
+<p>第 3 课埋的伏笔这里回收。切换日，用户身上挂着的会话有这么几层：</p>
 
 <table>
   <thead><tr><th>旧会话</th><th>认哪门语言</th><th>应用改说 OIDC 后它的命运</th></tr></thead>
   <tbody>
     <tr><td>应用本地会话</td><td>应用自己的 Cookie</td><td><strong>照常有效</strong>——本地会话不依赖任何 IdP，切协议碰不着它</td></tr>
-    <tr><td>CAS 层 TGT/TGC</td><td>CAS 协议</td><td>对已迁移应用<strong>失效成孤岛</strong>——它只在用户再访未迁移应用时才被用到</td></tr>
-    <tr><td>PF 层会话</td><td>PF 自己的 Cookie</td><td><strong>继续有效</strong>——迁移后登录直连 PF，有它照样免密直通（第 4 课图 1 第 3 步）</td></tr>
+    <tr><td>PF 层会话</td><td>PF 自己的 Cookie（OpenToken 与 OIDC 流程都经过它）</td><td><strong>继续有效</strong>——迁移后登录直连 PF，有它照样免密直通（第 4 课图 1 第 3 步）</td></tr>
+    <tr><td>旧 OpenToken 代码路径</td><td>Ping Integration Kit</td><td>随应用逐个下线、<strong>自然消亡</strong>——它甚至不产生会话残留，是「最无害的孤岛」</td></tr>
   </tbody>
 </table>
 
-<p>于是「孤岛无害化三原则」：① <strong>不强行迁移会话</strong>（没有干净的跨协议搬会话手段，别发明）；② <strong>让孤岛自然消亡</strong>——TGT 按既有超时策略过期即可，什么都不用做；③ <strong>登出语义兜底</strong>——双轨期用户在旧应用登出、新应用可能还活着（反之亦然），要么接受这个窗口期，要么在 PF 侧配统一登出策略。</p>
+<p>于是「孤岛无害化三原则」：① <strong>不强行迁移会话</strong>（没有干净的跨协议搬会话手段，别发明）；② <strong>让旧路径自然消亡</strong>——应用切完即下线 Ping SDK，双轨期两条路径并存但互不干扰；③ <strong>登出语义兜底</strong>——双轨期用户在旧应用登出、新应用可能还活着（反之亦然），要么接受窗口期，要么在 PF 侧配统一登出策略。</p>
 
 <p class="aside"><span class="aside-title">一个意外的好消息</span>
-因为 PF 层会话双轨通用，用户上午在旧体系登录过、下午访问已迁移的新应用——第 4 课图 1 第 3 步 PF 认出自己的会话 Cookie，<strong>免密直通</strong>。所以切换日用户体验是「无感」的，多数用户根本不知道发生了迁移。</p>
+因为 PF 层会话双轨通用，用户上午在旧体系（OpenToken）登录过、下午访问已迁移的新应用——第 4 课图 1 第 3 步 PF 认出自己的会话 Cookie，<strong>免密直通</strong>。所以切换日用户体验是「无感」的，多数用户根本不知道发生了迁移。</p>
 
 <!-- ======================================================= -->
 <h2><span class="secno">§3</span>灰度七步清单</h2>
@@ -81,13 +81,13 @@
     <span class="desc">拿第 4 课图 1 的 8 步逐帧对照，重点盯：state/nonce 校验、ID Token 五项验证、错误分支</span></div></div>
   <div class="step"><span class="n">5</span><div>
     <strong>灰度上线并观测</strong>
-    <span class="desc">登录成功率、回调报错率、平均耗时；保留旧 CAS 代码路径作为回滚开关</span></div></div>
+    <span class="desc">登录成功率、回调报错率、平均耗时；保留 OpenToken 旧路径作为回滚开关</span></div></div>
   <div class="step"><span class="n">6</span><div>
     <strong>复制推广</strong>到其余应用
     <span class="desc">把第 3 步沉淀成团队模板/脚手架，越搬越快</span></div></div>
   <div class="step"><span class="n">7</span><div>
-    <strong>CAS 层退役</strong>
-    <span class="desc">先关新登录入口，等 TGT 全部自然过期（观察一个最长寿命周期），再下线服务器</span></div></div>
+    <strong>旧路径退役</strong>
+    <span class="desc">应用全部切换后，下线 OpenToken 接入与 Ping SDK，回收旧配置——为阶段二（自研 IdP 接棒）腾出舞台</span></div></div>
 </div>
 
 <!-- ======================================================= -->
@@ -97,12 +97,12 @@
   <thead><tr><th>坑</th><th>症状</th><th>解法</th></tr></thead>
   <tbody>
     <tr><td><strong>redirect_uri 不一致</strong></td><td>PF 拒绝跳转 / 回调 404</td><td>老朋友：逐字符比对，含协议、端口、路径、末尾斜杠；先在测试环境过一遍</td></tr>
-    <tr><td><strong>用户标识映射断裂</strong> 💣</td><td>迁移后登录成功但「变成了新用户」，历史数据对不上</td><td>核对 CAS 时代 <code>/serviceValidate</code> 返回的 user 与 OIDC 的 <code>sub</code> <strong>是否同一标识体系</strong>（工号 vs 邮箱 vs UUID）。不一致就先在 PF 侧调 claims 映射。这是最容易被忽略、后果最重的一个</td></tr>
+    <tr><td><strong>用户标识映射断裂</strong> 💣</td><td>迁移后登录成功但「变成了新用户」，历史数据对不上</td><td>核对 OpenToken 里承载的用户标识与 OIDC 的 <code>sub</code> <strong>是否同一标识体系</strong>（工号 vs 邮箱 vs UUID）。不一致就先在 PF 侧调 claims 映射。<strong>这条规矩要立两次</strong>：阶段一对 PF、阶段二对自研 IdP，sub 取值体系两次都不能变</td></tr>
     <tr><td><strong>漏验 state / nonce</strong></td><td>安全扫描亮红灯 / 理论可重放</td><td>用成熟库默认行为，别自作主张省略校验</td></tr>
     <tr><td><strong>时钟偏差</strong></td><td>ID Token 间歇性判为过期</td><td><code>exp</code>/<code>iat</code> 验证前确认应用服务器 NTP 同步；可容忍小偏移，但别关掉校验</td></tr>
     <tr><td><strong>公钥轮转</strong></td><td>某天凌晨起全部验签失败</td><td>别把 JWKS 公钥写死在配置里——按发现端点动态拉取并定期刷新</td></tr>
-    <tr><td><strong>登出语义变化</strong></td><td>「登出了还登着」投诉增加</td><td>CAS 的 SLO 是自动逐站通知；OIDC 默认没有等价物，需在 PF 配置登出端点（RP-initiated / front/back-channel 概念，落地时查 PF 文档），双轨期尤其要测</td></tr>
-    <tr><td><strong>代理票据（PT）应用</strong></td><td>服务间转授场景断掉</td><td>CAS 的 PGT/PT 在 OIDC 没有直接对应物；若真有应用在用，需单独设计（如 client credentials 流），提前排查</td></tr>
+    <tr><td><strong>登出语义变化</strong></td><td>「登出了还登着」投诉增加</td><td>旧 OpenToken 体系的登出靠各应用自行约定；OIDC 默认也没有自动全登出，需在 PF 配置登出端点（RP-initiated / front/back-channel 概念，落地时查 PF 文档），双轨期尤其要测</td></tr>
+    <tr><td><strong>服务间转授场景</strong></td><td>旧应用间「替用户访问另一个应用」的场景断掉</td><td>这类代理式访问（如 CAS 的 PGT/PT）在 OIDC 没有直接对应物；若旧体系有应用在用，需单独设计（如 client credentials 流），切换前逐一排查</td></tr>
     <tr><td><strong>阶段二预告：issuer 更替</strong></td><td>未来换自研 IdP 时全部验签失败</td><td>应用侧从一开始就按<strong>发现端点动态获取配置</strong>（而非写死每个 URL）；<code>sub</code> 用户标识在两个 IdP 间保持同一取值体系——阶段一的映射纪律，决定阶段二是改配置还是改代码</td></tr>
   </tbody>
 </table>
@@ -120,21 +120,21 @@
     <button type="button">只换名字不换流</button>
   </div>
   <div class="quiz-feedback"
-       data-ok="双轨并存 + 灰度：小流量试点跑通，保留旧路径回滚开关，逐个复制推广，最后才让 CAS 层自然退场。"
-       data-bad="正确姿势是灰度：试点应用先行、观测登录成功率、随时可回滚，全部迁完且 TGT 自然过期后才下线 CAS 层。"></div>
+       data-ok="双轨并存 + 灰度：小流量试点跑通，保留 OpenToken 旧路径作回滚开关，逐个复制推广，全部迁完再让旧路径退役。"
+       data-bad="正确姿势是灰度：试点应用先行、观测登录成功率、随时可回滚，全部迁完再下线旧路径。"></div>
 </div>
 
 <div class="quiz" data-answer="0">
-  <p class="quiz-q"><span class="qno">Q2</span>切换日，存量用户浏览器里的 TGC 会怎样？</p>
+  <p class="quiz-q"><span class="qno">Q2</span>切换日，用户此前在 PF 建立的登录会话（Cookie）会怎样？</p>
   <div class="quiz-options">
-    <button type="button">逐渐自然失效</button>
-    <button type="button">立即全部蒸发</button>
-    <button type="button">自动转成新票</button>
-    <button type="button">需要手工清除</button>
+    <button type="button">继续有效免密</button>
+    <button type="button">立即全部失效</button>
+    <button type="button">需要重新登记</button>
+    <button type="button">自动迁到应用</button>
   </div>
   <div class="quiz-feedback"
-       data-ok="TGC 按既有超时策略自然过期即可——这就是「会话孤岛无害化」：不强行迁移会话，让孤岛自然消亡。"
-       data-bad="什么都不用做：TGC/TGT 按原超时策略自然过期消亡。跨协议强行搬会话没有干净手段，也别去发明。"></div>
+       data-ok="PF 会话种在 PF 域名下，OpenToken 与 OIDC 流程都经过它——切换后新流程第 3 步照样认出这个 Cookie，免密直通，用户无感。"
+       data-bad="什么都不用做：PF 会话双轨通用，OIDC 流程照样认它、免密直通。跨协议强行搬会话没有干净手段，也不需要。"></div>
 </div>
 
 <div class="quiz" data-answer="0">
@@ -159,17 +159,17 @@
     <button type="button">浏览器缓存量</button>
   </div>
   <div class="quiz-feedback"
-       data-ok="CAS 时代的 user 与 OIDC 的 sub 若不是同一标识体系（工号 vs 邮箱 vs UUID），账号就「分裂」了——先核对 PF 的 claims 映射。这是清单里的隐形炸弹 💣"
-       data-bad="症状是「登录成功但变了新用户」——典型的标识映射断裂：CAS 的 user 与 OIDC 的 sub 出自不同体系。先查 PF 的 claims 映射配置。"></div>
+       data-ok="OpenToken 里的用户标识与 OIDC 的 sub 若不是同一标识体系（工号 vs 邮箱 vs UUID），账号就「分裂」了——先核对 PF 的 claims 映射。这条规矩阶段一、阶段二各要立一次。隐形炸弹 💣"
+       data-bad="症状是「登录成功但变了新用户」——典型的标识映射断裂：OpenToken 的用户标识与 OIDC 的 sub 出自不同体系。先查 PF 的 claims 映射配置。"></div>
 </div>
 
 <!-- ======================================================= -->
 <div class="summary">
   <h2>本课要点</h2>
   <ol>
-    <li><strong>终局</strong>：PF 不动，应用直连其 OIDC 端点，CAS 层退役；密码核对自始至终在 PF。</li>
-    <li><strong>双轨期</strong>：应用本地会话照常、TGC 成无害孤岛自然消亡、PF 会话双轨通用（用户基本无感）。</li>
-    <li><strong>灰度七步</strong>：PF 注册客户端 → 试点应用 → 授权码流程 → 逐帧验收 → 灰度观测 → 复制推广 → CAS 自然退场。</li>
+    <li><strong>终局</strong>：阶段一应用直连 PF 的 OIDC 端点（拆掉 OpenToken 专有锁定）；阶段二自研 IdP 接棒。密码核对位置始终不动。</li>
+    <li><strong>双轨期</strong>：应用本地会话照常、旧 OpenToken 路径随切换自然消亡、PF 会话双轨通用（用户基本无感）。</li>
+    <li><strong>灰度七步</strong>：PF 注册客户端 → 试点应用 → 授权码流程 → 逐帧验收 → 灰度观测 → 复制推广 → 旧路径退役。</li>
     <li><strong>头号坑</strong>：用户标识映射（user vs sub）——上线前必须核对，其余坑见 §4 清单。</li>
   </ol>
 </div>
@@ -180,7 +180,7 @@
 
 <div class="next-steps">
   <p><strong>下一课 · <a href="0006-saml-overview-and-three-protocol-comparison.html">第 6 课：SAML 速览与三协议大总结</a></strong><br>
-  认识第三种协议（你们 CAS↔PF 链路背后可能就在说它），并把三门语言放进一张总表——课程收官。</p>
+  认识第三种标准协议 SAML（你们「SAML 联合登录」链路的幕后语言之一），并把三门语言放进一张总表——课程收官。</p>
   <p><strong>💬 有疑问随时问我。</strong>如果你能接触到 PF 管理台或运维同事，把这课的七步清单带过去聊一次，收获会比读三遍还大。</p>
 </div>
 
