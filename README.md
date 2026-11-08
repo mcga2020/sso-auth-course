@@ -9,15 +9,20 @@
 | 0001 | 认证 vs 授权：一次登录背后发生了什么（Session/Cookie、SSO 骨架、三大协议地图） | ✅ 已发布 |
 | 0002 | 以 CAS 为例：逐个请求走完一次单点登录（两次重定向、票据校验、免密机制、排错地图） | ✅ 已发布 |
 | 0003 | 三种票据的一生：TGT、TGC 与单点登出（票据生命周期、SLO 机制、多层会话视角） | ✅ 已发布 |
-| 0004 | SAML：AuthnRequest、XML 断言与签名、元数据交换 | ⬜ 计划 |
-| 0005 | OIDC：OAuth 2.0 前置 → 授权码流程 → ID Token 验签 | ⬜ 计划 |
-| 0006 | 三协议对比选型 + 集成实战清单 | ⬜ 计划 |
+| 0004 | OIDC：授权码流程与 ID Token（PingFederate 真实端点、PKCE、与 CAS 逐帧对照） | ✅ 已发布 |
+| 0005 | CAS → OIDC 迁移专题（双轨并存、会话孤岛、灰度七步、坑点清单） | ✅ 已发布 |
+| 0006 | SAML 速览与三协议大总结（课程收官） | ✅ 已发布 |
 
 ## 目录结构
 
 ```text
-├── lessons/          课程正文（自包含 HTML，每课约 10 分钟）
-│   └── 0001-authn-authz-and-sso-map.html
+├── lessons/          课程正文（自包含 HTML，每课约 10-15 分钟）
+│   ├── 0001-authn-authz-and-sso-map.html              认证地基与协议地图
+│   ├── 0002-cas-login-sequence-walkthrough.html       CAS 完整时序与排错
+│   ├── 0003-cas-ticket-lifecycle-and-slo.html         票据生命周期与单点登出
+│   ├── 0004-oidc-authorization-code-and-id-token.html 授权码流程与 ID Token
+│   ├── 0005-cas-to-oidc-migration.html                CAS → OIDC 迁移专题
+│   └── 0006-saml-overview-and-three-protocol-comparison.html  SAML 速览与大总结
 ├── reference/        参考文档（可打印速查）
 │   └── auth-glossary.html      认证与 SSO 术语表
 ├── assets/           共享组件

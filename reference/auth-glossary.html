@@ -160,28 +160,40 @@
   <tbody>
     <tr id="oauth2"><td>OAuth 2.0</td>
       <td><strong>授权</strong>框架：让第三方应用在用户许可下访问其资源。本身不定义「用户是谁」。</td>
-      <td>RFC 6749 标题即 <em>Authorization</em> Framework。<span class="lesson-tag">0005</span></td></tr>
+      <td>RFC 6749 标题即 <em>Authorization</em> Framework。<span class="lesson-tag">0004</span></td></tr>
     <tr id="oidc-term"><td>OIDC<span class="en">OpenID Connect</span></td>
       <td>建立在 OAuth 2.0 之上的<strong>身份层</strong>，用 ID Token 补上「认证」。</td>
-      <td><span class="lesson-tag">0005</span></td></tr>
+      <td><span class="lesson-tag">0004</span></td></tr>
     <tr id="id-token"><td>ID Token</td>
       <td>OIDC 签发的 JWT，内容是「谁、何时、被哪个 IdP 认证、给哪个应用」。<strong>给应用看的</strong>。</td>
-      <td><span class="lesson-tag">0005</span></td></tr>
+      <td><span class="lesson-tag">0004</span></td></tr>
     <tr id="access-token"><td>Access Token</td>
       <td>OAuth 的访问令牌，用于调用 API。<strong>给资源服务器看的</strong>，应用不应用它判断用户身份。</td>
-      <td>与 ID Token 的区别是高频考点。<span class="lesson-tag">0005</span></td></tr>
+      <td>与 ID Token 的区别是高频考点。<span class="lesson-tag">0004</span></td></tr>
     <tr id="jwt"><td>JWT<span class="en">JSON Web Token</span></td>
       <td>三段式签名令牌格式：<code>Header.Payload.Signature</code>，Base64URL 编码。</td>
-      <td>编码 ≠ 加密：任何人都能解码看到内容。<span class="lesson-tag">0005</span></td></tr>
+      <td>编码 ≠ 加密：任何人都能解码看到内容。<span class="lesson-tag">0004</span></td></tr>
     <tr id="auth-code"><td>授权码<span class="en">Authorization Code</span></td>
       <td>授权码流程中 IdP 返回的一次性中间码，应用后端用它换取 Token。</td>
-      <td>Web 应用的推荐流程。<span class="lesson-tag">0005</span></td></tr>
+      <td>Web 应用的推荐流程。<span class="lesson-tag">0004</span></td></tr>
     <tr id="jwks"><td>JWKS<span class="en">JSON Web Key Set</span></td>
       <td>IdP 公布公钥的接口，应用用这些公钥验证 ID Token 签名。</td>
-      <td><span class="lesson-tag">0005</span></td></tr>
+      <td><span class="lesson-tag">0004</span></td></tr>
     <tr id="scope"><td>Scope</td>
       <td>申请的权限范围。OIDC 请求必须包含 <code>openid</code>。</td>
-      <td><span class="lesson-tag">0005</span></td></tr>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="state"><td>state</td>
+      <td>应用在授权请求里生成的随机值，回调时原样带回，核对一致才继续——<strong>防 CSRF</strong>（伪造回调）。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="nonce"><td>nonce</td>
+      <td>应用生成、IdP 写回 ID Token 的随机值，必须匹配——<strong>防重放</strong>（旧 Token 重投）。与 state 一防回调伪造、一防令牌重放。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="pkce"><td>PKCE</td>
+      <td>Proof Key for Code Exchange（RFC 7636）：请求带 <code>code_challenge</code>（随机密钥的哈希），换票时出示 <code>code_verifier</code> 原值——防授权码被截获。OAuth 2.1 建议所有客户端启用。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="discovery"><td>发现端点<span class="en">Discovery Endpoint</span></td>
+      <td><code>/.well-known/openid-configuration</code>——一个 URL 拿到 IdP 全部端点地址、能力与公钥集（JWKS）位置。PingFederate 同样支持。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
   </tbody>
 </table>
 

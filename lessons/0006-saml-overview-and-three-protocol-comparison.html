@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 6 课 · SAML 速览与三协议大总结</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 6 课 · 收官</p>
+<h1>SAML 速览与三协议大总结</h1>
+<p class="subtitle">认识第三门语言，然后把整门课程装进一张表。</p>
+
+<div class="lesson-meta">
+  <span>约 10 分钟</span>
+  <span>前置：<a href="0005-cas-to-oidc-migration.html">第 5 课</a></span>
+  <span>速查：<a href="../reference/auth-glossary.html">术语表</a></span>
+</div>
+
+<p>SAML 是三巨头里资历最老的（2005 年 OASIS 标准）。你们大概率不用亲手对接它，但有两个理由值得花十分钟认识：<strong>第一</strong>，你们 CAS 层与 PingFederate 之间的委托链路，背后很可能就是说 SAML 的；<strong>第二</strong>，老牌企业 SaaS 至今遍地 SAML——读懂它，公司里任何登录体系你都叫得出名字。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§1</span>SAML 30 秒定位</h2>
+
+<table>
+  <thead><tr><th>维度</th><th>SAML 2.0</th></tr></thead>
+  <tbody>
+    <tr><td>角色叫法</td><td>认证中心 = <a href="../reference/auth-glossary.html#idp">IdP</a>；业务应用 = <a href="../reference/auth-glossary.html#sp">SP</a>（Service Provider）——「IdP」这个词的成名地</td></tr>
+    <tr><td>认证凭证</td><td><a href="../reference/auth-glossary.html#assertion"><strong>断言</strong></a>（Assertion）：一段带数字签名的 <strong>XML</strong>，声明「此用户已认证」并携带属性</td></tr>
+    <tr><td>验证方式</td><td>SP 用 IdP 证书<strong>本地验签</strong>（和 OIDC 同思路，比 CAS 早了快十年）</td></tr>
+    <tr><td>配置方式</td><td>双方交换<strong>元数据</strong>（Metadata）XML：实体 ID、端点地址、证书——SAML 版的「登记白名单」</td></tr>
+  </tbody>
+</table>
+
+<p>按 <a href="https://docs.oasis-open.org/security/saml/Post2.0/sstc-saml-tech-overview-2.0.html">OASIS 官方技术概览</a>的说法，断言里装的是「断言方声称关于某个主体为真的声明」——具体分三类：<strong>认证声明</strong>（用户何时如何登录）、<strong>属性声明</strong>（邮箱、部门、工号）、授权决策声明（少用）。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§2</span>SP 发起流程：一图流</h2>
+
+<div class="seq">
+  <div class="seq-title">图 1 · SP-Initiated SSO（对照第 2、4 课的图看，骨架一模一样）</div>
+  <div class="step"><span class="n">1</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">SP</span>：访问应用，无本地会话
+    <span class="desc">熟悉的开场</span></div></div>
+  <div class="step"><span class="n">2</span><div>
+    <span class="to">SP</span> <span class="arrow">──302──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">IdP</span>【第一次重定向】：携带 <a href="../reference/auth-glossary.html#authnrequest">AuthnRequest</a>（「请帮我认证这个用户」）
+    <span class="desc">相当于 CAS 的 service 参数、OIDC 的 redirect_uri —— 都是在说「我是谁、送回哪」</span></div></div>
+  <div class="step"><span class="n">3</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">IdP</span>：无会话 → 出登录页输密码；有会话 → 免密直通
+    <span class="desc">每个协议都有自己的「TGC」戏码</span></div></div>
+  <div class="step"><span class="n">4</span><div>
+    <span class="to">IdP</span> <span class="arrow">──302──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">SP</span>【第二次重定向】：把<strong>签好名的 XML 断言</strong>送到 SP 的 <a href="../reference/auth-glossary.html#acs">ACS 端点</a>（回调地址）
+    <span class="desc">注意：XML 体积大，SAML 常用<strong>POST 表单</strong>提交而非 URL 参数——这是它与 CAS/OIDC 的一个外观差异</span></div></div>
+  <div class="step"><span class="n">5</span><div>
+    <span class="to">SP</span>（内部）：用 IdP 证书<strong>本地验签</strong>断言 → 取出 <a href="../reference/auth-glossary.html#nameid">NameID</a>（用户标识）与属性
+    <span class="desc">不回 IdP 查询——这就是「签名代替查询」，和 OIDC 一个哲学</span></div></div>
+  <div class="step"><span class="n">6</span><div>
+    <span class="to">SP</span>：建本地会话 → 登录完成
+    <span class="desc">三课三个流程，结尾永远这一步</span></div></div>
+</div>
+
+<p class="aside"><span class="aside-title">SP 发起 vs IdP 发起</span>
+上面是 SP 发起（用户先访问应用）。SAML 还有个特有变体：<strong>IdP 发起</strong>——用户从 IdP 的应用门户点图标进入应用，IdP 直接推送断言过去。日常排错时先分清是哪种发起，日志位置完全不同。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§3</span>三协议大总结</h2>
+
+<table>
+  <thead><tr><th>维度</th><th>CAS</th><th>SAML 2.0</th><th>OIDC</th></tr></thead>
+  <tbody>
+    <tr><td>诞生</td><td>2001 · 耶鲁 → Apereo</td><td>2005 · OASIS</td><td>2014 · OpenID 基金会（基于 2012 的 OAuth 2.0）</td></tr>
+    <tr><td>认证凭证</td><td>ST 票据（随机串）</td><td>XML 断言（签名）</td><td>ID Token = JWT（签名）</td></tr>
+    <tr><td>应用如何验证</td><td><strong>回后台查询</strong> /serviceValidate</td><td><strong>本地验签</strong>（证书）</td><td><strong>本地验签</strong>（JWKS 公钥）</td></tr>
+    <tr><td>回调地址叫</td><td><code>service</code></td><td>ACS</td><td><code>redirect_uri</code></td></tr>
+    <tr><td>防重放/防伪造</td><td>ST 一次性 + service 绑定</td><td>签名 + Conditions（时效/受众）</td><td>签名 + state + nonce + PKCE</td></tr>
+    <tr><td>配置体验</td><td>简单（URL 参数）</td><td>重（双份 XML 元数据）</td><td>最好（发现端点自描述）</td></tr>
+    <tr><td>典型场景</td><td>高校、政企内网</td><td>老牌企业 SaaS</td><td>现代 Web / 移动 / 云原生</td></tr>
+    <tr><td><strong>你们的角色</strong></td><td><strong>现在时</strong>：应用正在用</td><td>可能在 CAS↔PF 链路幕后</td><td><strong>将来时</strong>：迁移目标</td></tr>
+  </tbody>
+</table>
+
+<p>最后回望第 1 课的通用骨架——<strong>跳到认证中心 → 登录（或被会话 Cookie 免密放行）→ 带一次性凭证回来 → 验证凭证 → 建本地会话</strong>。三个协议六课内容，兜兜转转全是这一个骨架的变奏。你现在拥有的是「骨架眼睛」：任何登录体系，先找两次重定向，再问「凭证是什么、谁验证」，它对你就是透明的。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§4</span>课程收官：回望任务书</h2>
+
+<p>对照开工时立下的 <a href="https://github.com/mcga2020/sso-auth-course">任务</a>，你现在的位置：</p>
+
+<table>
+  <thead><tr><th>成功标准</th><th>对应课程</th></tr></thead>
+  <tbody>
+    <tr><td>画出 CAS 完整时序，说清每步传了什么</td><td>第 2 课 ✓（加上架构课外的 PingFederate 委托链路，你画的是真实生产图）</td></tr>
+    <tr><td>独立完成应用侧对接：回调配置、票据校验</td><td>第 2、4 课 ✓（CAS 的 ST 校验 + OIDC 授权码流程都有谱了）</td></tr>
+    <tr><td>登录故障按流程定位环节</td><td>第 2、3 课的排错地图 + 票据视角 ✓</td></tr>
+    <tr><td>讲清 OIDC 流程与 ID Token 验签</td><td>第 4 课 ✓</td></tr>
+    <tr><td>为 CAS → OIDC 迁移写关键决策</td><td>第 5 课 ✓（七步清单 + 坑点表，可直接当方案骨架）</td></tr>
+  </tbody>
+</table>
+
+<p><strong>接下来最好的学习是动手</strong>：拿测试环境的应用跑一遍第 5 课的七步；再把 <a href="../reference/auth-glossary.html">术语表</a>打印出来贴工位。遇到任何卡点，回来问我——课程会一直在这里。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§5</span>毕业测验</h2>
+<p>四道跨课程综合题，答完这一课就毕业了。</p>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q1</span>SAML 的认证凭证是什么形态？</p>
+  <div class="quiz-options">
+    <button type="button">XML签名断言</button>
+    <button type="button">JWT签名令牌</button>
+    <button type="button">一次性ST票据</button>
+    <button type="button">无签名的字符串</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="SAML 断言 = 带数字签名的 XML，由 IdP 签发、SP 用证书本地验签。JWT 是 OIDC 的、ST 是 CAS 的。"
+       data-bad="SAML 的凭证是带签名的 XML 断言（Assertion）。JWT 令牌属于 OIDC，一次性 ST 票据属于 CAS——这正是三协议的核心差异。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q2</span>SP 发起的 SAML 流程，第一棒在谁手里？</p>
+  <div class="quiz-options">
+    <button type="button">由应用侧发起</button>
+    <button type="button">由认证方发起</button>
+    <button type="button">由浏览器直发</button>
+    <button type="button">由数据库发起</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="SP 发起 = 用户先访问应用（SP），应用把用户重定向去 IdP——和 CAS/OIDC 的开场完全同构。IdP 发起则是从 IdP 门户点图标进入。"
+       data-bad="SP（应用）发起：用户先访问应用，应用再把他送往 IdP。这是三种协议共享的「应用侧发起」骨架。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q3</span>你们公司的迁移目标、也是 PingFederate 原生支持的协议是？</p>
+  <div class="quiz-options">
+    <button type="button">OIDC</button>
+    <button type="button">SAML</button>
+    <button type="button">SCIM</button>
+    <button type="button">LDAP</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="PF 原生说 SAML/OIDC/OAuth2/WS-Fed，而你们的目标语言是 OIDC（JWT 只是它的令牌格式，SCIM 是账号同步协议）。"
+       data-bad="迁移目标是 OIDC——PF 的 /as/authorization.oauth2 就是它的入口。SCIM 管账号同步，LDAP 是目录服务，它们都不是这次的迁移目标。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q4</span>三种协议共同骨架的第一步，通常是？</p>
+  <div class="quiz-options">
+    <button type="button">跳到认证中心</button>
+    <button type="button">本地先建会话</button>
+    <button type="button">直接换取令牌</button>
+    <button type="button">跳回应用回调</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="无本地会话 → 应用把用户第一次重定向到认证中心——CAS、SAML、OIDC 无一例外。这就是第 1 课图 2 的起点。"
+       data-bad="第一步永远是「应用发现你没登录，把你重定向到认证中心」。换令牌、跳回调都在其后——顺序记牢，排错时它就是你的地图。"></div>
+</div>
+
+<!-- ======================================================= -->
+<div class="summary">
+  <h2>课程总结</h2>
+  <ol>
+    <li><strong>一个骨架</strong>：跳转 → 登录/免密 → 带一次性凭证回 → 验证 → 建本地会话。三协议皆此骨架的变奏。</li>
+    <li><strong>一个原则</strong>：认证只发生在一处（你们的 PF）；Cookie 域名隔离不是障碍，是 SSO 的机制本身。</li>
+    <li><strong>一套方法论</strong>：先找两次重定向，再问「凭证是什么、谁验证、怎么防伪」——任何登录体系皆可拆解。</li>
+    <li><strong>一份行动方案</strong>：第 5 课七步清单 + 坑点表，就是你们 CAS → OIDC 迁移的起点。</li>
+  </ol>
+</div>
+
+<h2>推荐阅读</h2>
+<p><strong>主要资源：</strong><a href="https://developer.okta.com/docs/concepts/saml/">Okta Developer · Understanding SAML</a>——想再深入 SAML 时的最佳中文区友好入口（英文但图好）。</p>
+<p><strong>进阶：</strong><a href="https://docs.oasis-open.org/security/saml/Post2.0/sstc-saml-tech-overview-2.0.html">OASIS SAML 2.0 Technical Overview</a>——官方概览，断言三类声明的权威出处。</p>
+
+<div class="next-steps">
+  <p><strong>🎓 课程完结。</strong>六课、一份术语表、两个实地验证作业（登录数跳转、登出传导）还欠着结果——随时带回来。之后最好的下一步：在测试环境把第 5 课七步跑一遍。</p>
+  <p><strong>💬 我仍是你的老师。</strong>工作中撞上任何登录疑难——报错截图、诡异跳转、验签失败——直接贴过来，我们一起按骨架拆解。</p>
+</div>
+
+<footer>
+  <p>课程地图：<a href="0001-authn-authz-and-sso-map.html">① 认证地基</a> ·
+     <a href="0002-cas-login-sequence-walkthrough.html">② CAS 时序</a> ·
+     <a href="0003-cas-ticket-lifecycle-and-slo.html">③ 票据一生</a> ·
+     <a href="0004-oidc-authorization-code-and-id-token.html">④ OIDC</a> ·
+     <a href="0005-cas-to-oidc-migration.html">⑤ 迁移专题</a> · ⑥ 本文</p>
+  <p>SSO 认证课程 · 第 6 课 / 共 6 课 · 完</p>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

@@ -141,6 +141,8 @@ pre {
   overflow-x: auto;
   font-size: 0.82rem;
   line-height: 1.6;
+  white-space: pre-wrap;      /* 长行优雅折行（如 JWT 长串），短行不受影响 */
+  word-break: break-all;      /* 无空格的长 token 在容器边缘断行而非溢出 */
 }
 pre code { background: none; padding: 0; }
 

@@ -21,6 +21,10 @@
   SAML 2.0 规范正文（Assertions and Protocols）。用例：查断言结构、Conditions、NameID 格式等细节。
 - [OpenID Connect Core 1.0（OpenID Foundation）](https://openid.net/specs/openid-connect-core-1_0.html)
   OIDC 核心规范：ID Token、UserInfo、所有授权流程。用例：核对 OIDC 集成细节。
+- [RFC 7636 · PKCE（IETF）](https://datatracker.ietf.org/doc/html/rfc7636)
+  code_verifier / code_challenge 防授权码截获；OAuth 2.1 建议所有客户端启用。用例：OIDC 对接的安全基线。
+- [PingFederate · OAuth 2.0 端点文档（官方）](https://docs.pingidentity.com/pingfederate/13.1/developers_reference_guide/pf_oauth_20_endpoints.html)
+  /as/authorization.oauth2、/as/token.oauth2、/.well-known/openid-configuration 等端点权威定义。用例：迁移落地时逐项对照。
 - [How OpenID Connect Works（OpenID Foundation 官方入门）](https://openid.net/developers/how-connect-works/)
   最权威的 OIDC 一页式解释，说明 OIDC 是 OAuth 2.0 之上的身份层。用例：第一手入门材料。
 

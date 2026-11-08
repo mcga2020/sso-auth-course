@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 4 课 · OIDC：授权码流程与 ID Token</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 4 课 · OIDC——PingFederate 的原生语言</p>
+<h1>OIDC：授权码流程与 ID Token</h1>
+<p class="subtitle">你们迁移的终点站。学完你会发现：它和 CAS 惊人地同构，只是票据换成了 Token。</p>
+
+<div class="lesson-meta">
+  <span>约 14 分钟</span>
+  <span>前置：<a href="0003-cas-ticket-lifecycle-and-slo.html">第 3 课</a></span>
+  <span>速查：<a href="../reference/auth-glossary.html">术语表</a></span>
+</div>
+
+<p>你们的应用今天说 CAS 协议，迁移后将直连 PingFederate 说什么？<strong>OIDC</strong>。这一课走它的完整流程——放心，两次重定向、后端通道、回调地址白名单，这些概念你已经全部吃过，OIDC 只是给它们换了名字。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§1</span>先分清：OAuth 2.0 是授权，OIDC 是认证</h2>
+
+<p><a href="https://datatracker.ietf.org/doc/html/rfc6749">RFC 6749</a> 的标题是 <em>The OAuth 2.0 <strong>Authorization</strong> Framework</em>——授权框架。它解决的是「让第三方应用在用户许可下访问资源」，<strong>天生不管「用户是谁」</strong>。</p>
+
+<p><a href="https://openid.net/developers/how-connect-works/">OpenID 基金会对 OIDC 的定义</a>：在 OAuth 2.0 之上加一个<strong>身份层</strong>（identity layer）——具体说，就是让授权响应里多带一个 <a href="../reference/auth-glossary.html#id-token">ID Token</a>，里面写清「谁、何时、被哪个 IdP 认证、给哪个应用」。于是授权框架就升级成了认证协议。</p>
+
+<p class="aside"><span class="aside-title">一句话记忆</span>
+OAuth 2.0 管「能拿什么」，OIDC 管「你是谁」。你们迁移要的是后者。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§2</span>授权码流程：完整时序（含 PingFederate 真实端点）</h2>
+
+<p>Web 应用的标准流程叫<strong>授权码流程</strong>（Authorization Code Flow）。PingFederate 的端点很有辨识度（<a href="https://docs.pingidentity.com/pingfederate/13.1/developers_reference_guide/pf_oauth_20_endpoints.html">官方端点文档</a>）：</p>
+
+<div class="seq">
+  <div class="seq-title">图 1 · 授权码流程：应用 oa.company.com 直连 PingFederate（共 8 步，还是两次重定向 + 一次后端通道）</div>
+
+  <div class="step"><span class="n">1</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用</span>：<code>GET /</code>，无本地会话
+    <span class="desc">与 CAS 流程第 1 步一模一样</span></div></div>
+
+  <div class="step"><span class="n">2</span><div>
+    <span class="to">应用</span> <span class="arrow">──302──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">PF</span>【<strong>第一次重定向</strong>：带上回调地址】
+    <span class="desc"><code>https://sso.company.com/as/authorization.oauth2?response_type=code&amp;client_id=oa-app&amp;redirect_uri=https%3A%2F%2Foa.company.com%2Foidc%2Fcallback&amp;scope=openid&amp;state=x7k2…&amp;nonce=n9q3…</code></span></div></div>
+
+  <div class="step"><span class="n">3</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">PF</span>：PF 检查<strong>自己的会话 Cookie</strong>
+    <span class="desc">没有 → 出登录页，你输密码（MFA 也在这一步）；有 → <strong>跳过登录页直通</strong>——CAS 的 TGC 免密戏码在 PF 层重演，只是这次会话种在 PF 域名下</span></div></div>
+
+  <div class="step"><span class="n">4</span><div>
+    <span class="to">PF</span> <span class="arrow">──302──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用</span>【<strong>第二次重定向</strong>：前往回调地址】
+    <span class="desc"><code>https://oa.company.com/oidc/callback?code=SplxlOBeZQQY…&amp;state=x7k2…</code>——一次性授权码 <code>code</code> 抵达，<code>state</code> 原样带回</span></div></div>
+
+  <div class="step"><span class="n">5</span><div>
+    <span class="to">应用</span>（内部）：核对 <code>state</code> —— 与第 2 步发出去的一致吗？
+    <span class="desc">不一致立即中止：这叫防 CSRF，CAS 流程里没有显式对应物</span></div></div>
+
+  <div class="step"><span class="n">6</span><div>
+    <span class="to">应用后端</span> <span class="arrow">──POST──▶</span> <span class="to">PF</span>【<strong>后端通道</strong>，不经浏览器】
+    <span class="desc"><code>POST /as/token.oauth2</code>：<code>grant_type=authorization_code&amp;code=SplxlO…&amp;redirect_uri=…&amp;client_id=oa-app&amp;client_secret=…</code></span></div></div>
+
+  <div class="step"><span class="n">7</span><div>
+    <span class="to">PF</span> <span class="arrow">──▶</span> <span class="to">应用后端</span>：JSON 应答
+    <span class="desc"><code>{ "token_type": "Bearer", "access_token": "…", "id_token": "eyJhbGciOiJSUzI1NiIs…" }</code></span></div></div>
+
+  <div class="step"><span class="n">8</span><div>
+    <span class="to">应用</span>（内部）：验证 ID Token（§3）→ 建本地会话 → <code>Set-Cookie</code> → 登录完成
+    <span class="desc">从此又回到第 1 课图 1 的普通世界</span></div></div>
+</div>
+
+<p>第 2 步那串参数逐个拆：<code>response_type=code</code> 表示「我要授权码」；<code>scope</code> 里<strong>必须有 <code>openid</code></strong>（规范原话：OIDC 请求 MUST 包含 openid scope，否则就不算 OIDC，只是普通 OAuth）；<code>redirect_uri</code> 就是回调地址，必须在 PF 的客户端注册里<strong>逐字符一致</strong>（老朋友又来了）。</p>
+
+<p class="aside"><span class="aside-title">现代标准配置：PKCE</span>
+<a href="https://datatracker.ietf.org/doc/html/rfc7636">RFC 7636</a> 定义的 PKCE：第 2 步多带一个随机密钥的哈希（<code>code_challenge</code>），第 6 步后端出示原值（<code>code_verifier</code>）——对不上就拒绝换票。它防的是授权码在传输中被截获。OAuth 2.1 草案已建议<strong>所有</strong>客户端（不限于手机 App）都启用。对接 PF 时直接按带 PKCE 写，一步到位。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§3</span>解剖 ID Token：JWT 三段式</h2>
+
+<p>第 7 步拿到的 <code>id_token</code> 是个 <a href="../reference/auth-glossary.html#jwt">JWT</a>（JSON Web Token），长这样：</p>
+
+<pre><code>eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9  ←  Header（算法声明）
+.eyJpc3MiOiJodHRwczovL3Nzby5jb21wYW55LmNvbSIsInN1YiI6IjEwMDMyIiwiYXVkIjoib2EtYXBwIiwiZXhwIjoxNzkxNjAwMDAwLCJpYXQiOjE3OTE1OTY0MDAsIm5vbmNlIjoibjlxMyJ9  ←  Payload（声明）
+.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c  ←  Signature（PF 的私钥签名）</code></pre>
+
+<p><mark>Base64URL 是编码，不是加密</mark>——中间那段任何人都能解开看（不信把 Payload 那串丢进任意 JWT 解码器）。JWT 的安全不靠藏内容，靠<strong>签名防篡改</strong>。</p>
+
+<p>Payload 里的声明（claims）对照表（均为 <a href="https://openid.net/specs/openid-connect-core-1_0.html">OIDC 核心规范</a> REQUIRED 项）：</p>
+
+<table>
+  <thead><tr><th>声明</th><th>含义</th><th>验证时查什么</th></tr></thead>
+  <tbody>
+    <tr><td><code>iss</code></td><td>签发者（PF 的地址）</td><td>必须与配置的 Issuer <strong>精确匹配</strong></td></tr>
+    <tr><td><code>sub</code></td><td>用户唯一标识（你们的工号/账号）</td><td>迁移关键：要能与 CAS 时代的用户名对上号</td></tr>
+    <tr><td><code>aud</code></td><td>受众——这个 Token 发给谁</td><td>必须包含<strong>自己的 client_id</strong>，别人的就拒绝</td></tr>
+    <tr><td><code>exp</code> / <code>iat</code></td><td>过期时间 / 签发时间</td><td>当前时间必须早于 <code>exp</code>（注意各机器时钟同步）</td></tr>
+    <tr><td><code>nonce</code></td><td>第 2 步发出去的随机串</td><td>必须<strong>原样带回</strong>——防重放，对不上即拒绝</td></tr>
+  </tbody>
+</table>
+
+<p>验签用的公钥不用找 PF 管理员要：访问 <code>https://sso.company.com/.well-known/openid-configuration</code>（OIDC <strong>发现端点</strong>），端点地址、支持的 scope、公钥集（<a href="../reference/auth-glossary.html#jwks">JWKS</a>）地址全在里面——这是 OIDC 比 SAML 舒服的地方：<strong>一个 URL 自描述一切</strong>。</p>
+
+<p class="aside"><span class="aside-title">ID Token vs Access Token，别混</span>
+<strong>ID Token 是给应用看的</strong>（认证结果，验完建会话就完事）；<strong>Access Token 是给 API 看的</strong>（调接口的通行证，塞在 <code>Authorization: Bearer …</code> 头里）。用 ID Token 去调 API、用 Access Token 判断用户身份，都是常见新手错误。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§4</span>和 CAS 逐帧对照：你已经会一半了</h2>
+
+<table>
+  <thead><tr><th>骨架步骤</th><th>CAS 协议（你们今天）</th><th>OIDC（迁移后）</th></tr></thead>
+  <tbody>
+    <tr><td>第一次重定向</td><td><code>/cas/login?service=回调地址</code></td><td><code>/as/authorization.oauth2?redirect_uri=回调地址</code></td></tr>
+    <tr><td>登录与免密</td><td>输密码 → TGT/TGC</td><td>输密码 → PF 会话 Cookie</td></tr>
+    <tr><td>第二次重定向</td><td>回调 + <code>?ticket=ST-…</code></td><td>回调 + <code>?code=…&amp;state=…</code></td></tr>
+    <tr><td>一次性时效凭证</td><td>ST（分钟级、一用即废）</td><td>code（同上，且默认再叠一层 PKCE）</td></tr>
+    <tr><td>凭证如何变成身份</td><td><strong>回 CAS 后台查</strong> <code>/serviceValidate</code></td><td><code>/as/token</code> 换 ID Token，<strong>应用本地验签</strong></td></tr>
+    <tr><td>本地会话</td><td>建自己的 Session + Cookie</td><td>完全相同</td></tr>
+  </tbody>
+</table>
+
+<p>看清楚这张表：<strong>骨架六步全部同构</strong>，正是第 1 课图 2 那个通用骨架。真正的差异只有一处半——「凭证校验」从回后台查询变成了拿公钥本地验签（签名代替了查询），加上半个：参数更多、防护更细（state、nonce、PKCE）。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§5</span>检验一下</h2>
+<p>不要回翻，凭记忆作答。</p>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q1</span>OAuth 2.0 本质上是什么框架？</p>
+  <div class="quiz-options">
+    <button type="button">授权框架</button>
+    <button type="button">认证框架</button>
+    <button type="button">加密框架</button>
+    <button type="button">传输框架</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="RFC 6749 的标题就是 Authorization Framework——它管「能拿什么资源」，不管「你是谁」。补上身份层的才是 OIDC。"
+       data-bad="OAuth 2.0 是授权框架（RFC 6749 标题原文）。认证是 OIDC 在它之上加的身份层——这正是第 1 课强调的 AuthN vs AuthZ 之别。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q2</span>拿授权码去换 Token 的请求（第 6 步），走的是哪条通道？</p>
+  <div class="quiz-options">
+    <button type="button">后端直达</button>
+    <button type="button">前端直连</button>
+    <button type="button">页面内嵌</button>
+    <button type="button">无需交换</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="应用后端直接 POST 到 PF 的 /as/token.oauth2，client_secret 与 Token 都不经过浏览器——和 CAS 的 /serviceValidate 一样是后端通道。"
+       data-bad="换 Token 是应用后端与 PF 之间的直接 POST（后端通道），浏览器全程见不到 client_secret 和 Token 本体。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q3</span>ID Token 的形态是？</p>
+  <div class="quiz-options">
+    <button type="button">签名JWT令牌</button>
+    <button type="button">加密XML断言</button>
+    <button type="button">一次性ST票据</button>
+    <button type="button">无签名的字符串</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="ID Token 是带 PF 数字签名的 JWT（Header.Payload.Signature 三段式）。Base64URL 只是编码不是加密，安全靠签名防篡改。"
+       data-bad="ID Token = 三段式 JWT（Header.Payload.Signature），由 PF 私钥签名、应用用公钥本地验签。XML 断言是 SAML 的形态。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q4</span>ID Token 的声明中，专门用来防重放的是？</p>
+  <div class="quiz-options">
+    <button type="button">nonce</button>
+    <button type="button">state</button>
+    <button type="button">scope</button>
+    <button type="button">email</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="nonce 由应用在请求时生成、PF 原样写回 ID Token——对不上即拒绝，重放的旧 Token 无所遁形。state 防的是 CSRF，管回调这一跳。"
+       data-bad="防重放的是 nonce：请求时发出去、Token 里带回来，必须原样匹配。state 防的是 CSRF；scope 是权限范围；email 只是普通属性。"></div>
+</div>
+
+<!-- ======================================================= -->
+<div class="summary">
+  <h2>本课要点</h2>
+  <ol>
+    <li><strong>OAuth 2.0 管授权，OIDC = OAuth 2.0 + 身份层</strong>（ID Token）；请求 OIDC 必须 <code>scope=openid</code>。</li>
+    <li><strong>授权码流程与 CAS 骨架同构</strong>：两次重定向（redirect_uri ↔ service；code ↔ ST）+ 一次后端通道（/as/token ↔ /serviceValidate）；新增 state（防 CSRF）、nonce（防重放）、PKCE（防截获）。</li>
+    <li><strong>ID Token 是签名 JWT</strong>：验证五件事——签名（JWKS 公钥）、iss、aud、exp、nonce；发现端点 <code>/.well-known/openid-configuration</code> 自描述一切。</li>
+    <li><strong>ID Token 给应用看，Access Token 给 API 看</strong>，各司其职。</li>
+  </ol>
+</div>
+
+<h2>推荐阅读</h2>
+<p><strong>主要资源：</strong><a href="https://openid.net/developers/how-connect-works/">OpenID Foundation · How OpenID Connect Works</a>——官方一页式解释，配合本课图 1 食用。</p>
+<p><strong>进阶：</strong><a href="https://openid.net/specs/openid-connect-core-1_0.html">OIDC Core 规范 §3.1</a>（授权码流程）与 <a href="https://docs.pingidentity.com/pingfederate/13.1/developers_reference_guide/pf_oauth_20_endpoints.html">PingFederate OAuth 端点文档</a>——动手对接时逐项对照。</p>
+
+<div class="next-steps">
+  <p><strong>下一课 · <a href="0005-cas-to-oidc-migration.html">第 5 课：CAS → OIDC 迁移专题</a></strong><br>
+  双轨并存期怎么设计、灰度切换的七步清单、以及迁移路上最坑的六个点（含用户标识映射这个隐形炸弹）。</p>
+  <p><strong>💬 有疑问随时问我。</strong>学完这课，你已经有能力读懂 PF 管理台里的 OIDC 客户端配置了——如果能看到，去看看 redirect_uri 白名单和签发策略长什么样。</p>
+</div>
+
+<footer>
+  <p>上一课：<a href="0003-cas-ticket-lifecycle-and-slo.html">三种票据的一生</a> ·
+     速查：<a href="../reference/auth-glossary.html">术语表</a> ·
+     <a href="../reference/auth-glossary.html#oidc">OIDC / OAuth 术语</a></p>
+  <p>SSO 认证课程 · 第 4 课 / 共 6 课</p>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
