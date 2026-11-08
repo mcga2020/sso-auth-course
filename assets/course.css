@@ -1,0 +1,293 @@
+/* ============================================================
+   course.css — SSO 认证课程共享样式
+   所有 lessons/*.html 与 reference/*.html 均引用此文件，
+   保证整个课程视觉统一。Tufte 风格：纸面、衬线、宽留白。
+   ============================================================ */
+
+:root {
+  --paper: #fffdf7;
+  --ink: #21201c;
+  --ink-soft: #5c5850;
+  --accent: #8b2332;        /* 砖红 */
+  --accent-soft: #f6ebe7;
+  --link: #1c5d99;
+  --link-visited: #14456e;
+  --rule: #e5dfd2;          /* 分隔线 */
+  --code-bg: #f3efe6;
+  --ok: #2e7d32;
+  --ok-soft: #e9f4ea;
+  --bad: #b23a48;
+  --bad-soft: #f9ecee;
+  --mark: #fdf3d3;          /* 高亮底色 */
+  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --serif: Georgia, "Iowan Old Style", "Songti SC", "Noto Serif SC", "Source Han Serif SC", "STSong", serif;
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 17px; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 5rem;
+}
+
+/* ---------- 头部 ---------- */
+.kicker {
+  font-family: var(--serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.6rem;
+}
+
+h1 {
+  font-size: 1.9rem;
+  line-height: 1.3;
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+}
+
+.subtitle {
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 1.02rem;
+  margin: 0 0 1.6rem;
+}
+
+.lesson-meta {
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+  padding: 0.55rem 0;
+  margin-bottom: 2.4rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  display: flex;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+}
+
+/* ---------- 正文 ---------- */
+h2 {
+  font-size: 1.28rem;
+  margin: 2.8rem 0 0.9rem;
+  padding-top: 0.2rem;
+}
+
+h2 .secno {
+  color: var(--accent);
+  font-style: italic;
+  margin-right: 0.45rem;
+}
+
+h3 { font-size: 1.05rem; margin: 1.8rem 0 0.5rem; }
+
+p { margin: 0 0 1.1rem; }
+
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:visited { color: var(--link-visited); }
+
+strong { font-weight: 700; }
+em { font-style: italic; }
+
+mark { background: var(--mark); padding: 0.05em 0.25em; }
+
+/* 行内术语：中文 + 英文原文 */
+.term { font-style: normal; }
+.term .en { color: var(--ink-soft); font-size: 0.88em; }
+
+/* 引用/旁注 */
+.aside {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 0.9rem 1.2rem;
+  margin: 1.4rem 0;
+  font-size: 0.95rem;
+}
+.aside .aside-title {
+  font-style: italic;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.88rem;
+  letter-spacing: 0.08em;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--code-bg);
+  padding: 0.12em 0.4em;
+  border-radius: 3px;
+}
+
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1rem 1.2rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+pre code { background: none; padding: 0; }
+
+/* ---------- 时序步骤 ---------- */
+.seq {
+  margin: 1.6rem 0;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.92rem;
+}
+.seq .seq-title {
+  background: var(--code-bg);
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--rule);
+}
+.seq .step {
+  display: flex;
+  gap: 0.9rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  align-items: baseline;
+}
+.seq .step:last-child { border-bottom: none; }
+.seq .step .n {
+  flex: none;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(0.3rem);
+}
+.seq .step .from { color: var(--link); font-weight: 700; }
+.seq .step .to { color: var(--accent); font-weight: 700; }
+.seq .step .arrow { color: var(--ink-soft); }
+.seq .step .desc { display: block; color: var(--ink-soft); font-size: 0.87rem; margin-top: 0.15rem; }
+
+/* ---------- 表格 ---------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin: 1.4rem 0;
+}
+th {
+  font-family: var(--serif);
+  text-align: left;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  padding: 0.5rem 0.7rem 0.5rem 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+td {
+  border-bottom: 1px solid var(--rule);
+  padding: 0.6rem 0.7rem 0.6rem 0;
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: 2px solid var(--ink); }
+
+/* ---------- 测验（配合 quiz.js） ---------- */
+.quiz {
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 1.3rem 1.4rem;
+  margin: 1.8rem 0;
+  background: #fffefb;
+}
+.quiz .quiz-q {
+  font-weight: 700;
+  margin: 0 0 0.9rem;
+}
+.quiz .quiz-q .qno { color: var(--accent); font-style: italic; margin-right: 0.4rem; }
+.quiz .quiz-options { display: grid; gap: 0.55rem; margin: 0; padding: 0; }
+.quiz .quiz-options button {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  text-align: left;
+  padding: 0.55rem 0.9rem;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: border-color 0.15s, background 0.15s;
+}
+.quiz .quiz-options button:hover:not(:disabled) { border-color: var(--accent); }
+.quiz .quiz-options button:disabled { cursor: default; opacity: 0.75; }
+.quiz .quiz-options button.correct {
+  background: var(--ok-soft); border-color: var(--ok); color: var(--ok); opacity: 1; font-weight: 700;
+}
+.quiz .quiz-options button.incorrect {
+  background: var(--bad-soft); border-color: var(--bad); color: var(--bad); opacity: 1;
+}
+.quiz .quiz-feedback {
+  margin: 0.9rem 0 0;
+  font-size: 0.9rem;
+  border-top: 1px dashed var(--rule);
+  padding-top: 0.8rem;
+  display: none;
+}
+.quiz .quiz-feedback.show { display: block; }
+.quiz .quiz-feedback .verdict { font-weight: 700; }
+.quiz .quiz-feedback .verdict.ok { color: var(--ok); }
+.quiz .quiz-feedback .verdict.bad { color: var(--bad); }
+
+/* ---------- 小结 / 卡片 ---------- */
+.summary {
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 1.2rem 1.5rem;
+  margin: 2.2rem 0;
+}
+.summary h2 { margin-top: 0; }
+
+.next-steps {
+  border: 1px dashed var(--ink-soft);
+  border-radius: 8px;
+  padding: 1.1rem 1.4rem;
+  margin: 2.2rem 0;
+  font-size: 0.93rem;
+}
+
+footer {
+  margin-top: 3.5rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 1.2rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- 打印 ---------- */
+@media print {
+  html { font-size: 11.5pt; }
+  body { background: #fff; }
+  main { max-width: none; padding: 0; }
+  .quiz-options button { border: 1px solid #999; }
+  a { color: var(--ink); text-decoration: none; }
+  .no-print { display: none; }
+}

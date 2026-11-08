@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 1 课 · 认证 vs 授权：一次登录背后发生了什么</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<p class="kicker">第 1 课 · 认证地基</p>
+<h1>认证 vs 授权：一次登录背后发生了什么</h1>
+<p class="subtitle">在接触 CAS、SAML、OIDC 之前，先打牢三块地基。</p>
+
+<div class="lesson-meta">
+  <span>约 10 分钟</span>
+  <span>前置知识：无</span>
+  <span>速查：<a href="../reference/auth-glossary.html">认证与 SSO 术语表</a></span>
+</div>
+
+<p>你的目标是在工作项目里集成 SSO。CAS、SAML、OIDC 三个协议看起来各不相同——有的传「票据」，有的传 XML，有的传 JSON——但它们回答的是<strong>同一个问题</strong>：</p>
+
+<p class="aside"><span class="aside-title">贯穿整门课程的问题</span>
+应用 B 凭什么相信「这个用户已经在别处登录过了」？</p>
+
+<p>要看懂这个问题，你需要先弄清三件事：认证到底是什么；浏览器如何「记住」你已登录；为什么要把登录这件事交给一个中心。这一课就讲这三件事。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§1</span>认证 vs 授权</h2>
+
+<p>想象你刚入职一家公司：</p>
+
+<p><strong>早上，你在大门口刷工牌、过人脸核验</strong>——门禁系统确认「此人是本公司员工张三」。这叫<a href="../reference/auth-glossary.html#authn"><strong>认证</strong></a>（Authentication，缩写 AuthN）：确认<mark>你是谁</mark>。</p>
+
+<p><strong>进门后，你的工牌能打开三楼研发区，却打不开五楼财务室</strong>——这叫<a href="../reference/auth-glossary.html#authz"><strong>授权</strong></a>（Authorization，缩写 AuthZ）：决定<mark>你能做什么</mark>。</p>
+
+<p>顺序永远是<strong>先认证，后授权</strong>：系统得先知道你是谁，才能判断你有什么权限。</p>
+
+<div class="aside">
+  <span class="aside-title">为什么要先分清这两个词</span>
+  SSO 解决的是<strong>认证</strong>问题。CAS、SAML、OIDC 都是用来完成认证的协议。而常和它们一起出现的 OAuth 2.0，标准标题就叫 <a href="https://datatracker.ietf.org/doc/html/rfc6749"><em>The OAuth 2.0 Authorization Framework</em></a>——它是<strong>授权</strong>框架；OIDC 正是<a href="https://openid.net/developers/how-connect-works/">在 OAuth 2.0 之上补了一层「身份」</a>，才变成认证协议。很多人分不清 OAuth 和 OIDC，根源就在这里。第 5 课细讲。
+</div>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§2</span>浏览器如何「记住」你已登录</h2>
+
+<p>一个关键事实：HTTP 协议是<a href="../reference/auth-glossary.html#stateless"><strong>无状态</strong></a>的——服务器处理完一次请求就「忘了」你。打开第二个页面时，服务器并不知道你就是刚才那个人。</p>
+
+<p>那网站是怎么做到「登录一次，后续页面都认得你」的？答案是 <a href="../reference/auth-glossary.html#session">Session</a> + <a href="../reference/auth-glossary.html#cookie">Cookie</a> 这对组合。<a href="https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Guides/Cookies">MDN 的说法</a>是：Cookie「使基于无状态的 HTTP 协议记录稳定的状态信息成为了可能」，首要用途就是保持用户的登录状态。</p>
+
+<div class="seq">
+  <div class="seq-title">图 1 · 一次传统登录（单个应用，没有 SSO）</div>
+  <div class="step"><span class="n">1</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用</span>：<code>POST /login</code>，携带用户名 + 密码
+    <span class="desc">你在登录框输入并提交</span></div></div>
+  <div class="step"><span class="n">2</span><div>
+    <span class="to">应用</span>（内部）：核对密码 ✓ → 创建 Session 记录 <code>sid=a8f3… → 张三</code>
+    <span class="desc">这一步就是「认证」</span></div></div>
+  <div class="step"><span class="n">3</span><div>
+    <span class="to">应用</span> <span class="arrow">──▶</span> <span class="from">浏览器</span>：响应头 <code>Set-Cookie: sid=a8f3…</code>
+    <span class="desc">把会话的「号码牌」交给浏览器保管</span></div></div>
+  <div class="step"><span class="n">4</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用</span>：之后每次请求自动带上 <code>Cookie: sid=a8f3…</code>
+    <span class="desc">浏览器自动携带，你感觉不到</span></div></div>
+  <div class="step"><span class="n">5</span><div>
+    <span class="to">应用</span>（内部）：用 sid 查到 Session →「是张三」→ 正常返回页面
+    <span class="desc">这就是「保持登录」的真相</span></div></div>
+</div>
+
+<p>类比：<strong>Session 是前台的访客登记本</strong>（存在服务器），<strong>Cookie 是前台发给你的访客号码牌</strong>（存在浏览器）。你每次出示号码牌，前台翻登记本就知道你是谁。</p>
+
+<p>请记住 Cookie 的一条规矩，下一节要用：<mark>浏览器只把 Cookie 发回给它所属的域名</mark>（最多放宽到同一主域名下的子域名，如 <code>*.company.com</code>）。<a href="https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Guides/Cookies">完全不同的域名之间无法共享 Cookie</a>。</p>
+
+<div class="aside">
+  <span class="aside-title">你问的「有哪些认证方式」</span>
+  证明身份不只靠密码——验证码、指纹、Passkey 统称<strong>认证因素</strong>；网站传递身份的技术也不只 Session + Cookie，还有 Token（JWT）、API Key、证书等。我把它们整理成了两张速查表：<a href="../reference/auth-glossary.html#factors">认证因素</a> 与 <a href="../reference/auth-glossary.html#mechanisms">技术机制</a>。现在扫一眼即可，不必记。
+</div>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§3</span>SSO：把认证交给一个中心</h2>
+
+<p>你们公司可能有 OA、Wiki、CRM、代码仓库、报销系统……如果每个系统各自做一遍图 1 那套流程：</p>
+
+<ul>
+  <li>员工要记 N 套账号密码（或干脆全用同一个弱密码）；</li>
+  <li>每个系统都存一份密码，任何一个被攻破都是泄露；</li>
+  <li>员工离职，管理员要去 N 个系统逐个删号；</li>
+  <li>而由于 Cookie 的域名隔离，A 系统的登录状态<strong>天然无法</strong>被 B 系统看见。</li>
+</ul>
+
+<p><a href="../reference/auth-glossary.html#sso-term"><strong>SSO</strong></a>（Single Sign-On，单点登录）的思路是：把「认证」从各个应用里抽出来，交给一个专门的、大家都信任的认证中心——术语叫 <a href="../reference/auth-glossary.html#idp"><strong>IdP</strong></a>（Identity Provider）。各个<a href="../reference/auth-glossary.html#sp">业务应用</a>不再自己核对密码。<a href="https://www.cloudflare-cn.com/learning/access-management/what-is-sso/">Cloudflare 总结的好处</a>包括：用户只需一个强密码、IT 可集中执行密码策略与 MFA、凭据不再散落在各个应用里。</p>
+
+<div class="seq">
+  <div class="seq-title">图 2 · SSO 的通用骨架（三大协议共有）</div>
+  <div class="step"><span class="n">1</span><div>
+    <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用 A</span>：访问 OA
+    <span class="desc">应用 A 发现你没有本地 Session</span></div></div>
+  <div class="step"><span class="n">2</span><div>
+    <span class="to">应用 A</span> <span class="arrow">──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">IdP</span>：<a href="../reference/auth-glossary.html#redirect">302 重定向</a>到 IdP 登录页
+    <span class="desc">同时告诉 IdP：我是哪个应用、认证完送回哪里</span></div></div>
+  <div class="step"><span class="n">3</span><div>
+    <span class="from">浏览器</span> <span class="arrow">◀─▶</span> <span class="to">IdP</span>：你在 IdP 输入密码——全体系唯一的一次
+    <span class="desc">IdP 认证成功，并在<strong>自己的域名下</strong>种一个 Cookie，记住你</span></div></div>
+  <div class="step"><span class="n">4</span><div>
+    <span class="to">IdP</span> <span class="arrow">──▶</span> <span class="from">浏览器</span> <span class="arrow">──▶</span> <span class="to">应用 A</span>：重定向回应用 A，附上<a href="../reference/auth-glossary.html#token-generic">认证凭证</a>
+    <span class="desc">「此人已在我这里认证，他是张三」</span></div></div>
+  <div class="step"><span class="n">5</span><div>
+    <span class="to">应用 A</span>（内部）：<strong>验证</strong>凭证确实来自 IdP、未被篡改 → 创建本地 Session
+    <span class="desc">此后与图 1 的第 4–5 步完全相同</span></div></div>
+</div>
+
+<div class="aside">
+  <span class="aside-title">精妙之处：第二个应用为什么不用再输密码</span>
+  现在你打开 Wiki（应用 B）。第 1–2 步照旧，被重定向到 IdP。但这一次，浏览器访问的是 <strong>IdP 的域名</strong>，于是会自动带上第 3 步时 IdP 种下的 Cookie——IdP 认出你已登录，<strong>跳过输入密码</strong>，直接签发新凭证送你回 Wiki。<br><br>
+  回想 §2 的规矩：Cookie 不能跨域名共享。SSO 没有去打破这条规矩，而是<strong>让所有应用都把你送到同一个域名去</strong>——共享的登录状态，就存在那一个域名下。
+</div>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§4</span>三大协议地图</h2>
+
+<p>CAS、SAML、OIDC 都遵循图 2 的骨架。<mark>它们的区别主要在第 4、5 步：认证凭证长什么样、应用怎么验证它。</mark></p>
+
+<table>
+  <thead>
+    <tr><th>协议</th><th>出身</th><th>认证凭证</th><th>应用如何验证</th><th>常见场景</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>CAS</strong></td>
+      <td>约 2001 年<a href="https://apereo.atlassian.net/wiki/spaces/CASUM/pages/103261420/Introduction">诞生于耶鲁大学</a>，现由 <a href="https://apereo.github.io/cas/">Apereo 基金会</a>维护</td>
+      <td>ST 票据：一次性的随机字符串</td>
+      <td>拿票据<a href="https://apereo.github.io/cas/development/protocol/CAS-Protocol-Specification.html">回 CAS 后台查询</a>真伪</td>
+      <td>高校统一身份认证、政企内网</td>
+    </tr>
+    <tr>
+      <td><strong>SAML 2.0</strong></td>
+      <td><a href="https://docs.oasis-open.org/security/saml/Post2.0/sstc-saml-tech-overview-2.0.html">OASIS 标准</a>，2005 年发布</td>
+      <td>断言：带数字签名的 XML</td>
+      <td>用 IdP 证书<a href="https://developer.okta.com/docs/concepts/saml/">本地验签</a></td>
+      <td>企业员工经公司 IdP 登录各类 SaaS</td>
+    </tr>
+    <tr>
+      <td><strong>OIDC</strong></td>
+      <td><a href="https://openid.net/developers/how-connect-works/">OpenID 基金会</a>，2014 年发布，建在 OAuth 2.0 之上</td>
+      <td>ID Token：带数字签名的 JWT（JSON）</td>
+      <td>用 IdP 公钥本地验签</td>
+      <td>现代 Web / 移动 / 云原生，「用 Google 账号登录」</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="aside"><span class="aside-title">先别背细节</span>
+这张表只是地图。现在只需记住一句话：<strong>三者骨架相同，差别在认证凭证的形态与验证方式</strong>。每个协议后面都有专门的一课。</p>
+
+<!-- ======================================================= -->
+<h2><span class="secno">§5</span>检验一下</h2>
+<p>不要回翻上文，凭记忆作答。答错没关系——费力回忆本身就是在加深记忆。</p>
+
+<div class="quiz" data-answer="1">
+  <p class="quiz-q"><span class="qno">Q1</span>新员工在公司大门口刷工牌、过人脸核验，系统确认「此人是本公司员工张三」。这一步属于？</p>
+  <div class="quiz-options">
+    <button type="button">授权</button>
+    <button type="button">认证</button>
+    <button type="button">审计</button>
+    <button type="button">加密</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="门禁核对的是「你是谁」——这就是认证。工牌能开哪些门，才是授权。"
+       data-bad="这一步回答的是「你是谁」，属于认证。授权回答「你能做什么」，发生在认证之后。"></div>
+</div>
+
+<div class="quiz" data-answer="2">
+  <p class="quiz-q"><span class="qno">Q2</span>你登录公司 Wiki 后刷新页面，没有被要求重新登录。服务器靠什么认出你？</p>
+  <div class="quiz-options">
+    <button type="button">用户密码</button>
+    <button type="button">网络地址</button>
+    <button type="button">会话标识</button>
+    <button type="button">页面缓存</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="浏览器每次请求都自动携带 Cookie 里的 Session ID（会话标识），服务器用它查到你的 Session。HTTP 本身无状态，不会「记得」你。"
+       data-bad="密码只在登录那一刻提交一次。之后服务器靠的是 Cookie 中的 Session ID（会话标识）去查 Session 认出你。"></div>
+</div>
+
+<div class="quiz" data-answer="3">
+  <p class="quiz-q"><span class="qno">Q3</span>公司引入 SSO 之后，员工的密码应该在哪里被核对？</p>
+  <div class="quiz-options">
+    <button type="button">每个应用各自核对</button>
+    <button type="button">在浏览器本地核对</button>
+    <button type="button">由数据库直接核对</button>
+    <button type="button">只在认证中心核对</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="SSO 的核心就是「认证只发生在一处」：密码只在 IdP 核对，业务应用只验证 IdP 签发的认证凭证。"
+       data-bad="SSO 的核心是把认证抽到 IdP（认证中心）：密码只在那里核对，业务应用不再接触密码，只验证认证凭证。"></div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <p class="quiz-q"><span class="qno">Q4</span>CAS、SAML、OIDC 三大协议之间，最核心的差异在于？</p>
+  <div class="quiz-options">
+    <button type="button">凭证的形态与验证方式</button>
+    <button type="button">登录页面的设计与样式</button>
+    <button type="button">用户密码的长度与强度</button>
+    <button type="button">服务器的地域与机房数</button>
+  </div>
+  <div class="quiz-feedback"
+       data-ok="三者骨架相同（重定向 → 登录 → 带凭证回来 → 验证），区别在凭证：CAS 是票据、SAML 是 XML 断言、OIDC 是 JWT 格式的 ID Token，验证方式也各不相同。"
+       data-bad="三者骨架相同，真正的差异在认证凭证：CAS 票据要回后台查询；SAML 断言与 OIDC 的 ID Token 则用 IdP 的公钥在本地验签。"></div>
+</div>
+
+<!-- ======================================================= -->
+<div class="summary">
+  <h2>本课要点</h2>
+  <ol>
+    <li><strong>认证</strong>确认「你是谁」，<strong>授权</strong>决定「你能做什么」。SSO 解决的是认证。</li>
+    <li>HTTP 无状态，网站靠 <strong>Session（服务器的登记本）+ Cookie（浏览器的号码牌）</strong>记住你。Cookie 不能跨域名共享。</li>
+    <li>SSO 让所有应用把用户送到同一个 IdP：<strong>重定向 → 在 IdP 登录 → 带认证凭证回来 → 应用验证 → 建本地会话</strong>。CAS / SAML / OIDC 的区别，在于凭证的形态与验证方式。</li>
+  </ol>
+</div>
+
+<h2>推荐阅读</h2>
+<p><strong>主要资源：</strong><a href="https://www.cloudflare-cn.com/learning/access-management/what-is-sso/">Cloudflare 学习中心 ·「什么是 SSO？| 单点登录的工作方式」</a>——中文，用「酒吧门口查一次证件」的类比讲清 SSO 的原理与好处，5 分钟读完，正好巩固本课 §3。</p>
+<p><strong>补充：</strong><a href="https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Guides/Cookies">MDN ·「使用 HTTP Cookie」</a>——想深入了解 §2 中 Cookie 的属性（Domain、Secure、HttpOnly）时查阅。</p>
+
+<div class="next-steps">
+  <p><strong>下一课预告 · 第 2 课：SSO 骨架实战</strong><br>
+  以 CAS 为例，逐个 HTTP 请求走完一次完整的单点登录——URL 里带了什么参数、票据如何校验、第二个应用怎样做到免密登录。</p>
+  <p><strong>💬 有疑问随时问我。</strong>哪怕只是一个词没看懂，直接回到对话里提问——我是你的老师，没有「太基础的问题」。另外请告诉我：<strong>你们公司的项目实际要对接哪个协议？</strong>这会决定后面几课的侧重点。</p>
+</div>
+
+<footer>
+  <p>速查：<a href="../reference/auth-glossary.html">认证与 SSO 术语表</a> ·
+     <a href="../reference/auth-glossary.html#alias">三协议角色名称对照</a> ·
+     <a href="../reference/auth-glossary.html#mechanisms">认证方式速查</a></p>
+  <p>SSO 认证课程 · 第 1 课 / 共 6 课（计划）</p>
+</footer>
+
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

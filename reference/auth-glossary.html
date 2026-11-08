@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参考 · 认证与 SSO 术语表</title>
+<link rel="stylesheet" href="../assets/course.css">
+<style>
+  /* 术语表专用：表格首列加粗，紧凑排版便于打印查阅 */
+  td:first-child { font-weight: 700; white-space: nowrap; width: 9.5rem; }
+  td:first-child .en { display: block; font-weight: 400; font-size: 0.78rem; color: var(--ink-soft); white-space: normal; }
+  td .lesson-tag { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); }
+  .toc { font-size: 0.9rem; columns: 2; column-gap: 2rem; padding-left: 1.2rem; }
+  .toc li { margin-bottom: 0.2rem; }
+  table.alias td:first-child { width: auto; }
+</style>
+</head>
+<body>
+<main>
+
+<p class="kicker">Reference · 参考文档</p>
+<h1>认证与 SSO 术语表</h1>
+<p class="subtitle">整门课程的统一用语。遇到不认识的词，先来这里查。</p>
+
+<div class="lesson-meta">
+  <span>适用课程：全部</span>
+  <span>右侧标签 = 深入讲解该术语的课号</span>
+  <span>可打印</span>
+</div>
+
+<ol class="toc">
+  <li><a href="#basics">基础概念</a></li>
+  <li><a href="#sso">SSO 角色与机制</a></li>
+  <li><a href="#alias">角色名称对照表</a></li>
+  <li><a href="#cas">CAS 专有术语</a></li>
+  <li><a href="#saml">SAML 专有术语</a></li>
+  <li><a href="#oidc">OIDC / OAuth 专有术语</a></li>
+  <li><a href="#factors">认证方式①：认证因素</a></li>
+  <li><a href="#mechanisms">认证方式②：技术机制</a></li>
+</ol>
+
+<!-- ======================================================= -->
+<h2 id="basics"><span class="secno">§1</span>基础概念</h2>
+<table>
+  <thead><tr><th>术语</th><th>定义</th><th>类比 / 备注</th></tr></thead>
+  <tbody>
+    <tr id="authn"><td>认证<span class="en">Authentication · AuthN</span></td>
+      <td>确认「<strong>你是谁</strong>」。</td>
+      <td>大门口刷工牌、人脸核验。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="authz"><td>授权<span class="en">Authorization · AuthZ</span></td>
+      <td>决定「<strong>你能做什么</strong>」。总在认证之后发生。</td>
+      <td>工牌能开研发区、开不了财务室。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="factor"><td>认证因素<span class="en">Factor / Credential</span></td>
+      <td>用来证明身份的东西：密码、验证码、指纹等。</td>
+      <td>见 <a href="#factors">认证方式①</a>。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="stateless"><td>无状态<span class="en">Stateless</span></td>
+      <td>HTTP 协议处理完一次请求就「忘了」你，两次请求之间没有记忆。</td>
+      <td>所以才需要 Session + Cookie。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="session"><td>会话<span class="en">Session</span></td>
+      <td><strong>服务器端</strong>保存的「此用户已登录」记录，以 Session ID 为索引。</td>
+      <td>前台的访客登记本。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="cookie"><td>Cookie<span class="en">HTTP Cookie</span></td>
+      <td>服务器让<strong>浏览器</strong>保存的一小段数据，之后访问同一域名时浏览器自动携带。常用来存 Session ID。受域名隔离：不能跨不同主域名共享。</td>
+      <td>前台发的访客号码牌。<span class="lesson-tag">0001</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2 id="sso"><span class="secno">§2</span>SSO 角色与机制</h2>
+<table>
+  <thead><tr><th>术语</th><th>定义</th><th>类比 / 备注</th></tr></thead>
+  <tbody>
+    <tr id="sso-term"><td>单点登录<span class="en">SSO · Single Sign-On</span></td>
+      <td>登录一次，即可访问多个互相信任的应用。</td>
+      <td>一张工牌刷遍全公司。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="idp"><td>IdP（认证中心）<span class="en">Identity Provider</span></td>
+      <td>专门负责认证用户、签发<a href="#token-generic">认证凭证</a>的服务。全体系<strong>只有它</strong>核对密码。</td>
+      <td>CAS Server、Keycloak、Okta、Azure AD（Entra ID）都是 IdP。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="sp"><td>业务应用<span class="en">SP · Service Provider</span></td>
+      <td>依赖 IdP 认证结果的应用（OA、Wiki、CRM…）。不接触密码，只验证认证凭证。</td>
+      <td>各协议叫法不同，见<a href="#alias">对照表</a>。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="token-generic"><td>认证凭证<span class="en">Security Token (泛称)</span></td>
+      <td>IdP 签发给应用、证明「此用户已在 IdP 认证」的东西。<strong>三大协议的核心差异就在它的形态与验证方式</strong>。</td>
+      <td>CAS = 票据；SAML = 断言；OIDC = ID Token。<span class="lesson-tag">0001</span></td></tr>
+    <tr id="redirect"><td>重定向<span class="en">HTTP 302 Redirect</span></td>
+      <td>服务器响应「请去另一个网址」，浏览器自动跳转。<strong>是动作、是交通工具</strong>。SSO 流程中共发生两次：① 应用把你送往 IdP；② 认证后 IdP 把你送回应用（目的地就是回调地址）。</td>
+      <td>SSO 流程的「交通工具」。<span class="lesson-tag">0002</span></td></tr>
+    <tr id="callback"><td>回调地址<span class="en">Callback / Redirect URI</span></td>
+      <td>IdP 认证完成后把用户送回应用的地址。<strong>是地址、是目的地</strong>，即第二次重定向要去的地方。第一次重定向时它作为参数告知 IdP；必须事先在 IdP 登记，否则拒绝（防止凭证被送到攻击者网站）。</td>
+      <td>CAS 叫 <code>service</code>，OIDC 叫 <code>redirect_uri</code>，SAML 叫 ACS。集成时最常见的报错来源之一。<span class="lesson-tag">0002</span></td></tr>
+    <tr id="slo"><td>单点登出<span class="en">SLO · Single Log-Out</span></td>
+      <td>在一处退出，所有已登录应用一起退出。</td>
+      <td>比单点登录难做得多。<span class="lesson-tag">0003</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2 id="alias"><span class="secno">§3</span>角色名称对照表</h2>
+<p>同一个角色，三份协议文档里叫法不同。读文档时对照此表：</p>
+<table class="alias">
+  <thead><tr><th>通用角色</th><th>CAS</th><th>SAML 2.0</th><th>OIDC</th></tr></thead>
+  <tbody>
+    <tr><td>认证中心</td><td>CAS Server</td><td>IdP（Identity Provider）</td><td>OP（OpenID Provider）</td></tr>
+    <tr><td>业务应用</td><td>Service / CAS Client</td><td>SP（Service Provider）</td><td>RP（Relying Party）/ Client</td></tr>
+    <tr><td>认证凭证</td><td>ST 票据（Service Ticket）</td><td>断言（Assertion，XML）</td><td>ID Token（JWT）</td></tr>
+    <tr><td>应用如何验证</td><td>后台调用 CAS 校验接口</td><td>用 IdP 证书本地验签</td><td>用 IdP 公钥本地验签</td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2 id="cas"><span class="secno">§4</span>CAS 专有术语</h2>
+<table>
+  <thead><tr><th>术语</th><th>定义</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr id="tgt"><td>TGT<span class="en">Ticket-Granting Ticket</span></td>
+      <td>用户在 CAS 登录成功后，CAS 服务端创建的全局登录记录，代表 SSO 会话本身。</td>
+      <td>「发票据的票据」。<span class="lesson-tag">0003</span></td></tr>
+    <tr id="tgc"><td>TGC<span class="en">Ticket-Granting Cookie</span></td>
+      <td>浏览器中指向 TGT 的 Cookie，只发给 CAS 服务器。第二个应用免密登录就靠它。</td>
+      <td><span class="lesson-tag">0003</span></td></tr>
+    <tr id="st"><td>ST<span class="en">Service Ticket</span></td>
+      <td>CAS 签发给某个应用的<strong>一次性</strong>票据，经 URL 参数传给应用。</td>
+      <td>用完即废，且有效期很短。<span class="lesson-tag">0003</span></td></tr>
+    <tr id="service-validate"><td>票据校验接口<span class="en">/serviceValidate</span></td>
+      <td>应用拿 ST 去 CAS 后台核验真伪、换取用户名。CAS 3.0 为 <code>/p3/serviceValidate</code>，可返回用户属性。</td>
+      <td><span class="lesson-tag">0003</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2 id="saml"><span class="secno">§5</span>SAML 专有术语</h2>
+<table>
+  <thead><tr><th>术语</th><th>定义</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr id="assertion"><td>断言<span class="en">Assertion</span></td>
+      <td>IdP 签发、带数字签名的 XML 文档，声明「此用户已认证」并携带属性（邮箱、部门等）。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="authnrequest"><td>认证请求<span class="en">AuthnRequest</span></td>
+      <td>SP 发给 IdP 的 XML 请求：「请帮我认证这个用户」。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="metadata"><td>元数据<span class="en">Metadata</span></td>
+      <td>双方互换的 XML 配置文件：实体 ID、端点地址、签名证书。集成 SAML 的第一步就是交换元数据。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="acs"><td>ACS<span class="en">Assertion Consumer Service</span></td>
+      <td>SP 上接收断言的端点地址（SAML 版的回调地址）。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="nameid"><td>NameID</td>
+      <td>断言中标识用户的字段，如邮箱或工号。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+    <tr id="sp-idp-initiated"><td>SP 发起 / IdP 发起<span class="en">SP- / IdP-initiated</span></td>
+      <td>流程从应用开始（访问应用 → 跳 IdP），或从 IdP 门户点击应用图标开始。</td>
+      <td><span class="lesson-tag">0004</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2 id="oidc"><span class="secno">§6</span>OIDC / OAuth 专有术语</h2>
+<table>
+  <thead><tr><th>术语</th><th>定义</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr id="oauth2"><td>OAuth 2.0</td>
+      <td><strong>授权</strong>框架：让第三方应用在用户许可下访问其资源。本身不定义「用户是谁」。</td>
+      <td>RFC 6749 标题即 <em>Authorization</em> Framework。<span class="lesson-tag">0005</span></td></tr>
+    <tr id="oidc-term"><td>OIDC<span class="en">OpenID Connect</span></td>
+      <td>建立在 OAuth 2.0 之上的<strong>身份层</strong>，用 ID Token 补上「认证」。</td>
+      <td><span class="lesson-tag">0005</span></td></tr>
+    <tr id="id-token"><td>ID Token</td>
+      <td>OIDC 签发的 JWT，内容是「谁、何时、被哪个 IdP 认证、给哪个应用」。<strong>给应用看的</strong>。</td>
+      <td><span class="lesson-tag">0005</span></td></tr>
+    <tr id="access-token"><td>Access Token</td>
+      <td>OAuth 的访问令牌，用于调用 API。<strong>给资源服务器看的</strong>，应用不应用它判断用户身份。</td>
+      <td>与 ID Token 的区别是高频考点。<span class="lesson-tag">0005</span></td></tr>
+    <tr id="jwt"><td>JWT<span class="en">JSON Web Token</span></td>
+      <td>三段式签名令牌格式：<code>Header.Payload.Signature</code>，Base64URL 编码。</td>
+      <td>编码 ≠ 加密：任何人都能解码看到内容。<span class="lesson-tag">0005</span></td></tr>
+    <tr id="auth-code"><td>授权码<span class="en">Authorization Code</span></td>
+      <td>授权码流程中 IdP 返回的一次性中间码，应用后端用它换取 Token。</td>
+      <td>Web 应用的推荐流程。<span class="lesson-tag">0005</span></td></tr>
+    <tr id="jwks"><td>JWKS<span class="en">JSON Web Key Set</span></td>
+      <td>IdP 公布公钥的接口，应用用这些公钥验证 ID Token 签名。</td>
+      <td><span class="lesson-tag">0005</span></td></tr>
+    <tr id="scope"><td>Scope</td>
+      <td>申请的权限范围。OIDC 请求必须包含 <code>openid</code>。</td>
+      <td><span class="lesson-tag">0005</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2 id="factors"><span class="secno">§7</span>认证方式①：认证因素（用什么证明你是你）</h2>
+<table>
+  <thead><tr><th>类别</th><th>例子</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>知识因素<span class="en">Something you know</span></td>
+      <td>密码、PIN 码、安全问题</td>
+      <td>最普遍，也最容易被钓鱼、撞库。</td></tr>
+    <tr><td>持有因素<span class="en">Something you have</span></td>
+      <td>短信验证码、TOTP 动态码（如 Google Authenticator）、硬件安全密钥（如 YubiKey）、客户端证书</td>
+      <td>证明你拿着某个设备。</td></tr>
+    <tr><td>生物因素<span class="en">Something you are</span></td>
+      <td>指纹、人脸、虹膜</td>
+      <td>通常在本地设备上比对。</td></tr>
+    <tr id="mfa"><td>多因素认证<span class="en">MFA</span></td>
+      <td>组合 <strong>≥ 2 种不同类别</strong>的因素。</td>
+      <td>密码 + 短信码 = MFA；密码 + 安全问题 ≠ MFA（同属知识因素）。</td></tr>
+    <tr id="passkey"><td>通行密钥<span class="en">Passkey · FIDO2 / WebAuthn</span></td>
+      <td>基于公私钥的无密码登录：私钥留在设备里，配合指纹/人脸解锁。</td>
+      <td>天然防钓鱼，是当下的发展方向。</td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= -->
+<h2 id="mechanisms"><span class="secno">§8</span>认证方式②：技术机制（系统如何传递与验证身份）</h2>
+<table>
+  <thead><tr><th>机制</th><th>原理一句话</th><th>典型场景</th></tr></thead>
+  <tbody>
+    <tr><td>HTTP Basic<span class="en">Basic Auth</span></td>
+      <td>每次请求头携带 <code>Authorization: Basic base64(用户名:密码)</code>。Base64 不是加密，必须配合 HTTPS。</td>
+      <td>内部工具、简单 API</td></tr>
+    <tr><td>Session + Cookie</td>
+      <td>服务端存会话，浏览器带 Session ID。</td>
+      <td>传统单体 Web 应用</td></tr>
+    <tr><td>Token（如 JWT）</td>
+      <td>服务端签发自包含的签名令牌，客户端放在 <code>Authorization: Bearer …</code>，服务端验签即可，不必存会话。</td>
+      <td>前后端分离、移动端、微服务</td></tr>
+    <tr><td>API Key</td>
+      <td>给<strong>程序</strong>（而非人）用的长期密钥，随请求发送。</td>
+      <td>开放平台、服务间调用</td></tr>
+    <tr><td>双向 TLS<span class="en">mTLS / 客户端证书</span></td>
+      <td>不只服务器出示证书，客户端也出示证书。</td>
+      <td>服务间通信、高安全内网</td></tr>
+    <tr><td>LDAP / AD</td>
+      <td>企业<strong>目录服务</strong>，存放账号与密码。应用或 IdP 通过它核对密码。<strong>不是 SSO 协议</strong>，常作为 IdP 背后的用户数据源。</td>
+      <td>企业账号体系</td></tr>
+    <tr><td>Kerberos</td>
+      <td>基于票据的网络认证协议，Windows 域登录的核心。</td>
+      <td>企业内网 SSO</td></tr>
+    <tr><td>SSO 协议<span class="en">CAS · SAML · OIDC</span></td>
+      <td>把认证交给 IdP，跨应用共享登录状态。</td>
+      <td>多系统统一登录 ← <strong>本课程主线</strong></td></tr>
+  </tbody>
+</table>
+
+<footer>
+  <p>本术语表随课程推进持续更新。来源：
+    <a href="https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Guides/Cookies">MDN · HTTP Cookie</a> ·
+    <a href="https://apereo.github.io/cas/development/protocol/CAS-Protocol-Specification.html">CAS Protocol 3.0</a> ·
+    <a href="https://developer.okta.com/docs/concepts/saml/">Okta · Understanding SAML</a> ·
+    <a href="https://openid.net/developers/how-connect-works/">OpenID Foundation · How OIDC Works</a> ·
+    <a href="https://datatracker.ietf.org/doc/html/rfc6749">RFC 6749 · OAuth 2.0</a>
+  </p>
+  <p>← 返回 <a href="../lessons/0001-authn-authz-and-sso-map.html">第 1 课</a></p>
+</footer>
+
+</main>
+</body>
+</html>

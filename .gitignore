@@ -1,0 +1,11 @@
+# 与课程无关的项目，不上传
+mcp-tool-gateway/
+
+# 教学工作区的私人状态（学习偏好、进度记录），不上传
+NOTES.md
+MISSION.md
+learning-records/
+
+# 系统杂项
+.DS_Store
+*.log
